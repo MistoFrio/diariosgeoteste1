@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Logo Geoteste">
+  <defs>
+    <style>
+      .bg { fill: #0f6b57; }
+      .wave { fill: #ffffff; }
+    </style>
+  </defs>
+  <circle class="bg" cx="256" cy="256" r="232" />
+  <path class="wave" d="M92 214c56-24 111-46 148-46 70 0 112 94 140 121 21 20 43 20 80 9l10 18c-62 24-100 44-144 44-74 0-126-182-204-182-12 0-28 6-46 14l16 22z"/>
+</svg>
+

@@ -1,0 +1,282 @@
+import React, { useState } from 'react';
+import { Search, Plus, Building2, Mail, Phone, MapPin, Edit, Trash2 } from 'lucide-react';
+import { Client } from '../types';
+
+// Mock data
+const mockClients: Client[] = [
+  {
+    id: '1',
+    name: 'Construtora ABC Ltda',
+    email: 'contato@abc.com.br',
+    phone: '(11) 3333-4444',
+    address: 'Av. Paulista, 1000 - São Paulo, SP',
+    createdAt: '2025-01-10'
+  },
+  {
+    id: '2',
+    name: 'Incorporadora XYZ',
+    email: 'projetos@xyz.com.br',
+    phone: '(21) 5555-6666',
+    address: 'Rua Copacabana, 200 - Rio de Janeiro, RJ',
+    createdAt: '2025-01-12'
+  },
+];
+
+export const ClientsManagement: React.FC = () => {
+  const [clients, setClients] = useState<Client[]>(mockClients);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
+
+  const filteredClients = clients.filter(client =>
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleOpenModal = (client?: Client) => {
+    if (client) {
+      setEditingClient(client);
+      setFormData({
+        name: client.name,
+        email: client.email,
+        phone: client.phone,
+        address: client.address
+      });
+    } else {
+      setEditingClient(null);
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: ''
+      });
+    }
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingClient(null);
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      address: ''
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingClient) {
+      // Update existing client
+      setClients(prev => prev.map(client => 
+        client.id === editingClient.id 
+          ? { ...client, ...formData }
+          : client
+      ));
+    } else {
+      // Add new client
+      const newClient: Client = {
+        id: Date.now().toString(),
+        ...formData,
+        createdAt: new Date().toISOString()
+      };
+      setClients(prev => [...prev, newClient]);
+    }
+    
+    handleCloseModal();
+  };
+
+  const handleDelete = (clientId: string) => {
+    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+      setClients(prev => prev.filter(client => client.id !== clientId));
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 md:mb-8 space-y-3 sm:space-y-0">
+        <div>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Gerenciamento de Clientes</h1>
+          <p className="text-xs sm:text-sm md:text-base text-gray-600 dark:text-gray-300">Cadastre e gerencie os clientes da empresa</p>
+        </div>
+        
+        <button
+          onClick={() => handleOpenModal()}
+          className="w-full sm:w-auto bg-green-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium hover:bg-green-700 hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center space-x-2 group"
+        >
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-90 transition-transform duration-200" />
+          <span className="text-sm sm:text-base">Novo Cliente</span>
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="mb-4 sm:mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+          <input
+            type="text"
+            placeholder="Buscar clientes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent hover:border-green-400 hover:shadow-md transition-all duration-200"
+          />
+        </div>
+      </div>
+
+      {/* Clients Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {filteredClients.map((client) => (
+          <div key={client.id} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-xl hover:scale-105 hover:border-green-200 dark:hover:border-green-700 transition-all duration-300 group cursor-pointer">
+            <div className="p-4 sm:p-5 md:p-6">
+              <div className="flex items-start justify-between mb-3 sm:mb-4">
+                <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-green-200 dark:group-hover:bg-green-800/50 group-hover:scale-110 transition-all duration-300">
+                    <Building2 className="text-green-600 dark:text-green-400 w-5 h-5 sm:w-6 sm:h-6 group-hover:text-green-700 dark:group-hover:text-green-300 transition-colors duration-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900 dark:text-white truncate">{client.name}</h3>
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Cliente desde {new Date(client.createdAt).getFullYear()}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-1 flex-shrink-0">
+                  <button
+                    onClick={() => handleOpenModal(client)}
+                    className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 hover:scale-110"
+                    title="Editar"
+                  >
+                    <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(client.id)}
+                    className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 hover:scale-110"
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-1.5 sm:space-y-2">
+                <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                  <Mail className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-400 flex-shrink-0" />
+                  <span className="truncate">{client.email}</span>
+                </div>
+                <div className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                  <Phone className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-400 flex-shrink-0" />
+                  <span className="truncate">{client.phone}</span>
+                </div>
+                <div className="flex items-start text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+                  <MapPin className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-gray-400 mt-0.5 flex-shrink-0" />
+                  <span className="line-clamp-2 break-words">{client.address}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filteredClients.length === 0 && (
+        <div className="text-center py-8 sm:py-12">
+          <Building2 className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-300 dark:text-gray-600 mb-3 sm:mb-4" />
+          <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-1 sm:mb-2">Nenhum cliente encontrado</h3>
+          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
+            {searchTerm ? 'Tente ajustar os termos de busca' : 'Comece adicionando um novo cliente'}
+          </p>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-sm sm:max-w-md border border-gray-100 dark:border-gray-800">
+            <div className="p-4 sm:p-5 md:p-6 border-b border-gray-100 dark:border-gray-800">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+                {editingClient ? 'Editar Cliente' : 'Novo Cliente'}
+              </h2>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Nome da Empresa *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Telefone *
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Endereço *
+                </label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                  required
+                />
+              </div>
+              
+              <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-3 sm:pt-4">
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  {editingClient ? 'Atualizar' : 'Cadastrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
