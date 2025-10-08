@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { PCEForm, PCEFormData } from './PCEForm';
 import { PITForm, PITFormData } from './PITForm';
 import { PLACAForm, PLACAFormData } from './PLACAForm';
+import { ClientSelector } from './ClientSelector';
 import { getEstados, getCidadesByEstado, getEstadoById, getCidadeById } from '../data/estadosCidades';
 
 interface NewDiaryProps {
@@ -530,24 +531,20 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
                     Carregando clientes...
                   </div>
                 ) : (
-                  <select
-                    value={formData.clientName}
-                    onChange={(e) => handleChange('clientName', e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    required
-                  >
-                    <option value="">Selecione um cliente</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.name}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {clients.length === 0 && !loadingClients && (
-                  <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
-                    Nenhum cliente cadastrado. {user?.role === 'admin' && 'Cadastre clientes na seção "Clientes".'}
-                  </p>
+                  <>
+                    <ClientSelector
+                      clients={clients}
+                      value={formData.clientName}
+                      onChange={(value) => handleChange('clientName', value)}
+                      loading={loadingClients}
+                      required
+                    />
+                    {clients.length === 0 && (
+                      <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+                        Nenhum cliente cadastrado. {user?.role === 'admin' && 'Cadastre clientes na seção "Clientes".'}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
               
