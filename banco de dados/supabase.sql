@@ -73,6 +73,7 @@ create table if not exists public.work_diaries (
   geotest_signature text not null,
   responsible_signature text not null,
   observations text,
+  endereco_detalhado jsonb,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
