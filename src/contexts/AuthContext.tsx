@@ -134,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ok: true };
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setIsLoading(false);
     if (!error) {
       return { ok: true };
@@ -202,9 +202,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isSupabaseConfigured) {
       setUser(null);
       localStorage.removeItem('currentUser');
+      // Recarregar a página para garantir que volta para a tela de login
+      window.location.reload();
       return;
     }
-    supabase.auth.signOut();
+    supabase.auth.signOut().then(() => {
+      window.location.reload();
+    });
   };
 
   return (
