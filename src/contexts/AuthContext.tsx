@@ -210,17 +210,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('🚪 Fazendo logout...');
     if (!isSupabaseConfigured) {
       console.log('📦 Removendo usuário do localStorage');
-      setUser(null);
       localStorage.removeItem('currentUser');
       console.log('✅ currentUser removido:', localStorage.getItem('currentUser'));
-      // Forçar limpeza e redirect
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 100);
+      setUser(null);
+      console.log('🔄 Forçando reload da página...');
+      // Forçar reload completo da página
+      window.location.reload();
       return;
     }
+    localStorage.clear();
     supabase.auth.signOut().then(() => {
-      window.location.href = '/';
+      window.location.reload();
     });
   };
 
