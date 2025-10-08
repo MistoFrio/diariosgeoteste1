@@ -1,4 +1,5 @@
 export type DiaryCsvRow = {
+  Tipo?: string;
   Cliente: string;
   Endereco: string;
   Equipe: string;
@@ -42,6 +43,7 @@ export function downloadCsv(fileName: string, rows: DiaryCsvRow[], delimiter: st
 }
 
 export function mapDiaryToCsvRow(d: {
+  type?: string;
   clientName: string;
   address: string;
   team: string;
@@ -54,6 +56,7 @@ export function mapDiaryToCsvRow(d: {
   observations?: string;
 }): DiaryCsvRow {
   return {
+    Tipo: d.type ?? '',
     Cliente: d.clientName,
     Endereco: d.address,
     Equipe: d.team,

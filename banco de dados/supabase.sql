@@ -65,6 +65,7 @@ create table if not exists public.work_diaries (
   client_name text not null,
   address text not null,
   team text not null,
+  diary_type text check (diary_type in ('PCE','PLACA','PIT','PDA')),
   date date not null,
   start_time text not null,
   end_time text not null,

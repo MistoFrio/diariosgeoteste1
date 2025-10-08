@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, FileText, Save, ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { PCEForm, PCEFormData } from './PCEForm';
+import { PITForm, PITFormData } from './PITForm';
+import { PLACAForm, PLACAFormData } from './PLACAForm';
+import { getEstados, getCidadesByEstado, getEstadoById, getCidadeById } from '../data/estadosCidades';
 
 interface NewDiaryProps {
   onBack: () => void;
@@ -16,6 +20,7 @@ interface TeamMember {
 export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
+    type: 'PCE',
     clientName: '',
     address: '',
     team: '',
@@ -26,6 +31,59 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
     geotestSignatureImage: '',
     responsibleSignature: '',
     observations: ''
+  });
+
+  const [enderecoDetalhado, setEnderecoDetalhado] = useState({
+    estadoId: 0,
+    cidadeId: 0,
+    rua: '',
+    numero: ''
+  });
+
+  const [estados] = useState(getEstados());
+  const [cidades, setCidades] = useState<any[]>([]);
+
+  const [pceData, setPceData] = useState<PCEFormData>({
+    ensaioTipo: 'PCE CONVENCIONAL',
+    piles: [
+      { estacaNome: '', estacaProfundidadeM: '', estacaTipo: '', estacaCargaTrabalhoTf: '', estacaDiametroCm: '' }
+    ],
+    carregamentoTipos: [],
+    equipamentos: { macaco: '', celula: '', manometro: '', relogios: '', conjuntoVigas: '' },
+    ocorrencias: '',
+    cravacao: { equipamento: '', horimetro: '' },
+    abastecimento: {
+      mobilizacao: { litrosTanque: '', litrosGalao: '' },
+      finalDia: { litrosTanque: '', litrosGalao: '' },
+      chegouDiesel: '',
+      fornecidoPor: '',
+      quantidadeLitros: '',
+      horarioChegada: ''
+    }
+  });
+
+  const [pitData, setPitData] = useState<PITFormData>({
+    equipamento: '',
+    piles: [
+      { estacaNome: '', estacaTipo: '', diametroCm: '', profundidadeCm: '', arrasamentoM: '', comprimentoUtilM: '' }
+    ],
+    ocorrencias: '',
+    totalEstacas: ''
+  });
+
+  const [placaData, setPlacaData] = useState<PLACAFormData>({
+    testPoints: [
+      { nome: '', cargaTrabalho1KgfCm2: '', cargaTrabalho2KgfCm2: '' }
+    ],
+    equipamentos: {
+      macaco: '',
+      celulaDeRCarga: '',
+      manometro: '',
+      placaDimensoes: '',
+      equipamentoReacao: '',
+      relogios: ''
+    },
+    ocorrencias: ''
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,10 +181,31 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
         return;
       }
 
+      // Montar endereço detalhado se preenchido
+      let enderecoCompleto = formData.address.trim();
+      if (enderecoDetalhado.estadoId > 0 && enderecoDetalhado.cidadeId > 0) {
+        const estado = getEstadoById(enderecoDetalhado.estadoId);
+        const cidade = getCidadeById(enderecoDetalhado.estadoId, enderecoDetalhado.cidadeId);
+        
+        if (estado && cidade) {
+          const enderecoDetalhadoText = `${enderecoDetalhado.rua.trim()}, ${enderecoDetalhado.numero.trim()}, ${cidade.nome}, ${estado.nome}`;
+          enderecoCompleto = enderecoDetalhadoText;
+        }
+      }
+
       const payload = {
         user_id: user.id,
+        diary_type: formData.type,
         client_name: formData.clientName.trim(),
-        address: formData.address.trim(),
+        address: enderecoCompleto,
+        endereco_detalhado: enderecoDetalhado.estadoId > 0 ? {
+          estado_id: enderecoDetalhado.estadoId,
+          estado_nome: getEstadoById(enderecoDetalhado.estadoId)?.nome || '',
+          cidade_id: enderecoDetalhado.cidadeId,
+          cidade_nome: getCidadeById(enderecoDetalhado.estadoId, enderecoDetalhado.cidadeId)?.nome || '',
+          rua: enderecoDetalhado.rua.trim(),
+          numero: enderecoDetalhado.numero.trim()
+        } : null,
         team: getSelectedTeamNames() || formData.team.trim(), // Usar nomes selecionados ou fallback para input manual
         date: formData.date, // yyyy-mm-dd
         start_time: formData.startTime,
@@ -138,11 +217,178 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
         observations: formData.observations.trim() || null,
       };
 
-      const { error: insertError } = await supabase.from('work_diaries').insert(payload);
+      // 1) Cria o diário base e obtém o id
+      const { data: diaryRows, error: insertError } = await supabase
+        .from('work_diaries')
+        .insert(payload)
+        .select('id')
+        .single();
       if (insertError) {
         setError(insertError.message);
         setIsSubmitting(false);
         return;
+      }
+
+      const diaryId = diaryRows?.id;
+
+      // 2) Se for PCE, cria registro PCE e, em seguida, as estacas (piles)
+      if (formData.type === 'PCE' && diaryId) {
+        const pcePayload: any = {
+          diary_id: diaryId,
+          ensaio_tipo: pceData.ensaioTipo,
+          carregamento_tipos: pceData.carregamentoTipos,
+          equipamentos_macaco: pceData.equipamentos.macaco || null,
+          equipamentos_celula: pceData.equipamentos.celula || null,
+          equipamentos_manometro: pceData.equipamentos.manometro || null,
+          equipamentos_relogios: pceData.equipamentos.relogios || null,
+          equipamentos_conjunto_vigas: pceData.equipamentos.conjuntoVigas || null,
+          ocorrencias: pceData.ocorrencias || null,
+          cravacao_equipamento: pceData.cravacao.equipamento || null,
+          cravacao_horimetro: pceData.cravacao.horimetro || null,
+          abastecimento_mobilizacao_litros_tanque: pceData.abastecimento.mobilizacao.litrosTanque || null,
+          abastecimento_mobilizacao_litros_galao: pceData.abastecimento.mobilizacao.litrosGalao || null,
+          abastecimento_finaldia_litros_tanque: pceData.abastecimento.finalDia.litrosTanque || null,
+          abastecimento_finaldia_litros_galao: pceData.abastecimento.finalDia.litrosGalao || null,
+          abastecimento_chegou_diesel: pceData.abastecimento.chegouDiesel === '' ? null : pceData.abastecimento.chegouDiesel === 'Sim',
+          abastecimento_fornecido_por: pceData.abastecimento.fornecidoPor || null,
+          abastecimento_quantidade_litros: pceData.abastecimento.quantidadeLitros || null,
+          abastecimento_horario_chegada: pceData.abastecimento.horarioChegada || null,
+        };
+
+        const { data: pceRow, error: pceError } = await supabase
+          .from('work_diaries_pce')
+          .insert(pcePayload)
+          .select('id')
+          .single();
+        if (pceError) {
+          setError(pceError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const pceId = (pceRow as any)?.id;
+
+        if (pceId && pceData.piles && pceData.piles.length > 0) {
+          const pilesPayload = pceData.piles.map((pile, idx) => ({
+            pce_id: pceId,
+            ordem: idx + 1,
+            estaca_nome: pile.estacaNome || null,
+            estaca_profundidade_m: pile.estacaProfundidadeM || null,
+            estaca_tipo: pile.estacaTipo || null,
+            estaca_carga_trabalho_tf: pile.estacaCargaTrabalhoTf || null,
+            estaca_diametro_cm: pile.estacaDiametroCm || null,
+          }));
+
+          // compatibilidade com nome da coluna pce_id na SQL criada
+          // a tabela está como work_diaries_pce_piles(pce_id ...)
+          const mapped = pilesPayload.map((p) => ({
+            pce_id: p.pce_id,
+            ordem: p.ordem,
+            estaca_nome: p.estaca_nome,
+            estaca_profundidade_m: p.estaca_profundidade_m,
+            estaca_tipo: p.estaca_tipo,
+            estaca_carga_trabalho_tf: p.estaca_carga_trabalho_tf,
+            estaca_diametro_cm: p.estaca_diametro_cm,
+          }));
+
+          const { error: pilesError } = await supabase
+            .from('work_diaries_pce_piles')
+            .insert(mapped);
+          if (pilesError) {
+            setError(pilesError.message);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      // 3) Se for PIT, cria registro PIT e estacas
+      if (formData.type === 'PIT' && diaryId) {
+        const pitPayload: any = {
+          diary_id: diaryId,
+          equipamento: pitData.equipamento || null,
+          ocorrencias: pitData.ocorrencias || null,
+          total_estacas: pitData.totalEstacas ? Number(pitData.totalEstacas) : null,
+        };
+
+        const { data: pitRow, error: pitError } = await supabase
+          .from('work_diaries_pit')
+          .insert(pitPayload)
+          .select('id')
+          .single();
+        if (pitError) {
+          setError(pitError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const pitId = (pitRow as any)?.id;
+        if (pitId && pitData.piles && pitData.piles.length > 0) {
+          const piles = pitData.piles.map((pile, idx) => ({
+            pit_id: pitId,
+            ordem: idx + 1,
+            estaca_nome: pile.estacaNome || null,
+            estaca_tipo: pile.estacaTipo || null,
+            diametro_cm: pile.diametroCm || null,
+            profundidade_cm: pile.profundidadeCm || null,
+            arrasamento_m: pile.arrasamentoM || null,
+            comprimento_util_m: pile.comprimentoUtilM || null,
+          }));
+
+          const { error: pitPilesError } = await supabase
+            .from('work_diaries_pit_piles')
+            .insert(piles);
+          if (pitPilesError) {
+            setError(pitPilesError.message);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      // 4) Se for PLACA, cria registro PLACA e pontos de ensaio
+      if (formData.type === 'PLACA' && diaryId) {
+        const placaPayload: any = {
+          diary_id: diaryId,
+          equipamentos_macaco: placaData.equipamentos.macaco || null,
+          equipamentos_celula_carga: placaData.equipamentos.celulaDeRCarga || null,
+          equipamentos_manometro: placaData.equipamentos.manometro || null,
+          equipamentos_placa_dimensoes: placaData.equipamentos.placaDimensoes || null,
+          equipamentos_equipamento_reacao: placaData.equipamentos.equipamentoReacao || null,
+          equipamentos_relogios: placaData.equipamentos.relogios || null,
+          ocorrencias: placaData.ocorrencias || null,
+        };
+
+        const { data: placaRow, error: placaError } = await supabase
+          .from('work_diaries_placa')
+          .insert(placaPayload)
+          .select('id')
+          .single();
+        if (placaError) {
+          setError(placaError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const placaId = (placaRow as any)?.id;
+        if (placaId && placaData.testPoints && placaData.testPoints.length > 0) {
+          const testPoints = placaData.testPoints.map((point, idx) => ({
+            placa_id: placaId,
+            ordem: idx + 1,
+            nome: point.nome || null,
+            carga_trabalho_1_kgf_cm2: point.cargaTrabalho1KgfCm2 || null,
+            carga_trabalho_2_kgf_cm2: point.cargaTrabalho2KgfCm2 || null,
+          }));
+
+          const { error: testPointsError } = await supabase
+            .from('work_diaries_placa_piles')
+            .insert(testPoints);
+          if (testPointsError) {
+            setError(testPointsError.message);
+            setIsSubmitting(false);
+            return;
+          }
+        }
       }
 
       setSuccess('Diário salvo com sucesso.');
@@ -156,6 +402,28 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleEstadoChange = (estadoId: number) => {
+    setEnderecoDetalhado(prev => ({
+      ...prev,
+      estadoId,
+      cidadeId: 0 // Reset cidade quando muda estado
+    }));
+    
+    if (estadoId > 0) {
+      const cidadesDoEstado = getCidadesByEstado(estadoId);
+      setCidades(cidadesDoEstado);
+    } else {
+      setCidades([]);
+    }
+  };
+
+  const handleEnderecoChange = (field: string, value: string | number) => {
+    setEnderecoDetalhado(prev => ({
       ...prev,
       [field]: value
     }));
@@ -206,6 +474,23 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
           </div>
           
           <div className="p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                Tipo do Diário *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {['PCE','PLACA','PIT','PDA'].map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => handleChange('type', opt)}
+                    className={`${formData.type === opt ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700'} px-3 py-2 rounded-lg font-medium hover:scale-105 transition-all`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
@@ -293,9 +578,80 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
                   onChange={(e) => handleChange('address', e.target.value)}
                   rows={2}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  placeholder="Endereço completo da obra"
+                  placeholder="Endereço completo da obra (ou use os campos detalhados abaixo)"
                   required
                 />
+              </div>
+            </div>
+
+            {/* Endereço Detalhado */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+                Endereço Detalhado (Opcional)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Estado
+                  </label>
+                  <select
+                    value={enderecoDetalhado.estadoId}
+                    onChange={(e) => handleEstadoChange(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                  >
+                    <option value={0}>Selecione o estado</option>
+                    {estados.map((estado) => (
+                      <option key={estado.id} value={estado.id}>
+                        {estado.nome} ({estado.sigla})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Cidade
+                  </label>
+                  <select
+                    value={enderecoDetalhado.cidadeId}
+                    onChange={(e) => handleEnderecoChange('cidadeId', Number(e.target.value))}
+                    disabled={enderecoDetalhado.estadoId === 0}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value={0}>Selecione a cidade</option>
+                    {cidades.map((cidade) => (
+                      <option key={cidade.id} value={cidade.id}>
+                        {cidade.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Rua
+                  </label>
+                  <input
+                    type="text"
+                    value={enderecoDetalhado.rua}
+                    onChange={(e) => handleEnderecoChange('rua', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                    placeholder="Nome da rua"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={enderecoDetalhado.numero}
+                    onChange={(e) => handleEnderecoChange('numero', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                    placeholder="Número"
+                  />
+                </div>
               </div>
             </div>
 
@@ -350,6 +706,24 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
             </div>
           </div>
         </div>
+
+        {formData.type === 'PCE' && (
+          <div className="mt-6">
+            <PCEForm value={pceData} onChange={setPceData} />
+          </div>
+        )}
+
+        {formData.type === 'PLACA' && (
+          <div className="mt-6">
+            <PLACAForm value={placaData} onChange={setPlacaData} />
+          </div>
+        )}
+
+        {formData.type === 'PIT' && (
+          <div className="mt-6">
+            <PITForm value={pitData} onChange={setPitData} />
+          </div>
+        )}
 
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
           <div className="p-4 sm:p-5 md:p-6 border-b border-gray-100 dark:border-gray-800 bg-green-50 dark:bg-green-900/20">

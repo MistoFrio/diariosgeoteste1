@@ -22,6 +22,13 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   const [rows, setRows] = useState<DiaryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pceDetail, setPceDetail] = useState<any | null>(null);
+  const [pcePiles, setPcePiles] = useState<any[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [pitDetail, setPitDetail] = useState<any | null>(null);
+  const [pitPiles, setPitPiles] = useState<any[]>([]);
+  const [placaDetail, setPlacaDetail] = useState<any | null>(null);
+  const [placaPiles, setPlacaPiles] = useState<any[]>([]);
 
   const filteredDiaries = rows.filter((diary) => {
     const term = searchTerm.trim().toLowerCase();
@@ -107,14 +114,42 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
           profilesMap.set(profile.id, profile);
         });
 
+        // Detectar tipo pelo relacionamento (fallback caso diary_type esteja vazio)
+        const diaryIds = (data || []).map((r: any) => r.id);
+        let pceByDiary = new Set<string>();
+        let pitByDiary = new Set<string>();
+        let placaByDiary = new Set<string>();
+        try {
+          if (diaryIds.length > 0) {
+            const [{ data: pceList }, { data: pitList }, { data: placaList }] = await Promise.all([
+              supabase.from('work_diaries_pce').select('diary_id').in('diary_id', diaryIds),
+              supabase.from('work_diaries_pit').select('diary_id').in('diary_id', diaryIds),
+              supabase.from('work_diaries_placa').select('diary_id').in('diary_id', diaryIds),
+            ]);
+            pceByDiary = new Set((pceList || []).map((x: any) => x.diary_id));
+            pitByDiary = new Set((pitList || []).map((x: any) => x.diary_id));
+            placaByDiary = new Set((placaList || []).map((x: any) => x.diary_id));
+          }
+        } catch (relErr) {
+          console.warn('Não foi possível detectar tipos pelos relacionamentos:', relErr);
+        }
+
         const mapped: DiaryRow[] = (data || []).map((r: any) => {
           const profile = profilesMap.get(r.user_id);
+          let inferredType: string | undefined = r.diary_type || undefined;
+          if (!inferredType) {
+            if (placaByDiary.has(r.id)) inferredType = 'PLACA';
+            else if (pitByDiary.has(r.id)) inferredType = 'PIT';
+            else if (pceByDiary.has(r.id)) inferredType = 'PCE';
+          }
           return {
             id: r.id,
             clientId: r.user_id,
             clientName: r.client_name,
             address: r.address,
+            enderecoDetalhado: r.endereco_detalhado || undefined,
             team: r.team,
+            type: inferredType as any,
             date: r.date,
             startTime: r.start_time,
             endTime: r.end_time,
@@ -128,6 +163,16 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
           };
         });
 
+        // Garantir ordenação: mais recente no topo (createdAt desc, fallback date desc)
+        mapped.sort((a: any, b: any) => {
+          const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          if (aCreated !== bCreated) return bCreated - aCreated;
+          const aDate = a.date ? new Date(a.date).getTime() : 0;
+          const bDate = b.date ? new Date(b.date).getTime() : 0;
+          return bDate - aDate;
+        });
+
         setRows(mapped);
       } catch (err: any) {
         setError('Não foi possível carregar os diários.');
@@ -138,6 +183,100 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
     fetchDiaries();
   }, [user, startDate, endDate, searchTerm]);
+
+  // Carregar dados específicos (PCE, PIT, PLACA) quando abrir um diário
+  useEffect(() => {
+    const fetchDetail = async () => {
+      if (!selectedDiary || !isSupabaseConfigured) {
+        setPceDetail(null);
+        setPcePiles([]);
+        setPitDetail(null);
+        setPitPiles([]);
+        setPlacaDetail(null);
+        setPlacaPiles([]);
+        return;
+      }
+      setLoadingDetail(true);
+      try {
+        // Buscar PCE por diary_id
+        const { data: pce, error: pceErr } = await supabase
+          .from('work_diaries_pce')
+          .select('id, ensaio_tipo, carregamento_tipos, equipamentos_macaco, equipamentos_celula, equipamentos_manometro, equipamentos_relogios, equipamentos_conjunto_vigas, ocorrencias, cravacao_equipamento, cravacao_horimetro, abastecimento_mobilizacao_litros_tanque, abastecimento_mobilizacao_litros_galao, abastecimento_finaldia_litros_tanque, abastecimento_finaldia_litros_galao, abastecimento_chegou_diesel, abastecimento_fornecido_por, abastecimento_quantidade_litros, abastecimento_horario_chegada')
+          .eq('diary_id', selectedDiary.id)
+          .maybeSingle();
+        if (pceErr) throw pceErr;
+        setPceDetail(pce || null);
+
+        if (pce?.id) {
+          const { data: piles, error: pilesErr } = await supabase
+            .from('work_diaries_pce_piles')
+            .select('id, ordem, estaca_nome, estaca_profundidade_m, estaca_tipo, estaca_carga_trabalho_tf, estaca_diametro_cm')
+            .eq('pce_id', pce.id)
+            .order('ordem', { ascending: true });
+          if (pilesErr) throw pilesErr;
+          setPcePiles(piles || []);
+        } else {
+          setPcePiles([]);
+        }
+
+        // Buscar PIT por diary_id
+        const { data: pit, error: pitErr } = await supabase
+          .from('work_diaries_pit')
+          .select('id, equipamento, ocorrencias, total_estacas')
+          .eq('diary_id', selectedDiary.id)
+          .maybeSingle();
+        if (pitErr) throw pitErr;
+        setPitDetail(pit || null);
+        if (pit?.id) {
+          const { data: pPiles, error: pPilesErr } = await supabase
+            .from('work_diaries_pit_piles')
+            .select('id, ordem, estaca_nome, estaca_tipo, diametro_cm, profundidade_cm, arrasamento_m, comprimento_util_m')
+            .eq('pit_id', pit.id)
+            .order('ordem', { ascending: true });
+          if (pPilesErr) throw pPilesErr;
+          setPitPiles(pPiles || []);
+        } else {
+          setPitPiles([]);
+        }
+
+        // Buscar PLACA por diary_id (apenas se for tipo PLACA)
+        if (selectedDiary.type === 'PLACA') {
+          const { data: placa, error: placaErr } = await supabase
+            .from('work_diaries_placa')
+            .select('id, equipamentos_macaco, equipamentos_celula_carga, equipamentos_manometro, equipamentos_placa_dimensoes, equipamentos_equipamento_reacao, equipamentos_relogios, ocorrencias')
+            .eq('diary_id', selectedDiary.id)
+            .maybeSingle();
+          if (placaErr) throw placaErr;
+          setPlacaDetail(placa || null);
+          if (placa?.id) {
+            const { data: placaTestPoints, error: placaTestPointsErr } = await supabase
+              .from('work_diaries_placa_piles')
+              .select('id, ordem, nome, carga_trabalho_1_kgf_cm2, carga_trabalho_2_kgf_cm2')
+              .eq('placa_id', placa.id)
+              .order('ordem', { ascending: true });
+            if (placaTestPointsErr) throw placaTestPointsErr;
+            setPlacaPiles(placaTestPoints || []);
+          } else {
+            setPlacaPiles([]);
+          }
+        } else {
+          setPlacaDetail(null);
+          setPlacaPiles([]);
+        }
+      } catch (e: any) {
+        console.error('Erro ao carregar detalhes do diário:', e);
+        setPceDetail(null);
+        setPcePiles([]);
+        setPitDetail(null);
+        setPitPiles([]);
+        setPlacaDetail(null);
+        setPlacaPiles([]);
+      } finally {
+        setLoadingDetail(false);
+      }
+    };
+    fetchDetail();
+  }, [selectedDiary]);
 
   const handleExport = async () => {
     if (!detailsRef.current || !selectedDiary) return;
@@ -156,6 +295,96 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
     const safeClient = selectedDiary.clientName.replace(/[^a-z0-9\-\_\s]/gi, '').replace(/\s+/g, '-');
     const fileName = `diario-${safeClient}-${selectedDiary.date}.csv`;
     downloadCsv(fileName, [mapDiaryToCsvRow(selectedDiary)]);
+  };
+
+  const handleDeleteDiary = async (diary: DiaryRow) => {
+    if (!isSupabaseConfigured) {
+      alert('Supabase não está configurado.');
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja excluir o diário de "${diary.clientName}" do dia ${formatDate(diary.date)}?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('🗑️ Excluindo diário:', diary.id);
+
+      // Deletar registros relacionados primeiro (devido às foreign keys)
+      if (diary.type === 'PCE') {
+        // Buscar o ID do registro PCE
+        const { data: pceData } = await supabase
+          .from('work_diaries_pce')
+          .select('id')
+          .eq('diary_id', diary.id)
+          .maybeSingle();
+        
+        if (pceData?.id) {
+          // Deletar as estacas do PCE primeiro
+          await supabase.from('work_diaries_pce_piles').delete().eq('pce_id', pceData.id);
+          // Deletar o registro PCE
+          await supabase.from('work_diaries_pce').delete().eq('diary_id', diary.id);
+        }
+      } else if (diary.type === 'PIT') {
+        // Buscar o ID do registro PIT
+        const { data: pitData } = await supabase
+          .from('work_diaries_pit')
+          .select('id')
+          .eq('diary_id', diary.id)
+          .maybeSingle();
+        
+        if (pitData?.id) {
+          // Deletar as estacas do PIT primeiro
+          await supabase.from('work_diaries_pit_piles').delete().eq('pit_id', pitData.id);
+          // Deletar o registro PIT
+          await supabase.from('work_diaries_pit').delete().eq('diary_id', diary.id);
+        }
+      } else if (diary.type === 'PLACA') {
+        // Buscar o ID do registro PLACA
+        const { data: placaData } = await supabase
+          .from('work_diaries_placa')
+          .select('id')
+          .eq('diary_id', diary.id)
+          .maybeSingle();
+        
+        if (placaData?.id) {
+          // Deletar os pontos de ensaio da PLACA primeiro
+          await supabase.from('work_diaries_placa_piles').delete().eq('placa_id', placaData.id);
+          // Deletar o registro PLACA
+          await supabase.from('work_diaries_placa').delete().eq('diary_id', diary.id);
+        }
+      }
+
+      // Finalmente, deletar o diário principal
+      const { error } = await supabase
+        .from('work_diaries')
+        .delete()
+        .eq('id', diary.id);
+
+      if (error) {
+        console.error('❌ Erro ao excluir diário:', error);
+        throw error;
+      }
+
+      console.log('✅ Diário excluído com sucesso');
+      
+      // Atualizar a lista removendo o diário excluído
+      setRows((prevRows) => prevRows.filter((r) => r.id !== diary.id));
+      
+      alert('Diário excluído com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao excluir diário:', err);
+      alert('Erro ao excluir o diário. Por favor, tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditDiary = (diary: DiaryRow) => {
+    alert('Funcionalidade de edição em desenvolvimento. Em breve você poderá editar os diários existentes.');
+    // TODO: Implementar navegação para página de edição
+    // ou abrir modal de edição
   };
 
   if (selectedDiary) {
@@ -188,65 +417,255 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
         {/* Diary Details */}
         <div ref={detailsRef} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 bg-green-50 dark:bg-green-900/20">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">Diário de Obra</h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
-              <span className="flex items-center">
-                <Calendar className="w-4 h-4 mr-1" />
-                {formatDate(selectedDiary.date)}
-              </span>
-              <span className="flex items-center">
-                <Clock className="w-4 h-4 mr-1" />
-                {formatTime(selectedDiary.startTime)} - {formatTime(selectedDiary.endTime)}
-              </span>
-              <span className="flex items-center">
-                <User className="w-4 h-4 mr-1" />
-                {selectedDiary.createdBy}
-              </span>
+          {/* Cabeçalho estilizado */}
+          <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <img src="/logogeoteste.png" alt="Geoteste" className="h-8 sm:h-10" />
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Diário de Obra {selectedDiary.type ? `• ${selectedDiary.type}` : ''}</h1>
+                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{selectedDiary.clientName}</p>
+                </div>
+              </div>
+              <div className="text-right text-xs sm:text-sm text-gray-700 dark:text-gray-200">
+                <div className="flex items-center justify-end gap-2"><Calendar className="w-4 h-4" /> {formatDate(selectedDiary.date)}</div>
+                <div className="flex items-center justify-end gap-2"><Clock className="w-4 h-4" /> {formatTime(selectedDiary.startTime)} - {formatTime(selectedDiary.endTime)}</div>
+                <div className="flex items-center justify-end gap-2"><User className="w-4 h-4" /> {selectedDiary.createdBy}</div>
+              </div>
             </div>
           </div>
 
           <div className="p-4 sm:p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Cliente</label>
-                <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.clientName}</p>
-              </div>
-              
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Equipe</label>
-                <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.team}</p>
+            {/* Bloco: Dados Gerais (estilo tabela) */}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">Dados do Ensaio</div>
+              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                <div className="grid grid-cols-1 md:grid-cols-2">
+                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Cliente</div>
+                    <div className="text-gray-900 dark:text-gray-100">{selectedDiary.clientName}</div>
+                  </div>
+                  <div className="p-3">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Equipe</div>
+                    <div className="text-gray-900 dark:text-gray-100">{selectedDiary.team}</div>
+                  </div>
+                </div>
+                <div className="p-3">
+                  <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Localização da obra</div>
+                  <div className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.address}</div>
+                  {selectedDiary.enderecoDetalhado && (
+                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
+                      <div className="text-blue-800 dark:text-blue-200 font-medium mb-1">Endereço Detalhado:</div>
+                      <div className="space-y-1 text-blue-700 dark:text-blue-300">
+                        <div><span className="font-medium">Estado:</span> {selectedDiary.enderecoDetalhado.estadoNome}</div>
+                        <div><span className="font-medium">Cidade:</span> {selectedDiary.enderecoDetalhado.cidadeNome}</div>
+                        <div><span className="font-medium">Rua:</span> {selectedDiary.enderecoDetalhado.rua}</div>
+                        <div><span className="font-medium">Número:</span> {selectedDiary.enderecoDetalhado.numero}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3">
+                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Data</div>
+                    <div className="text-gray-900 dark:text-gray-100">{formatDate(selectedDiary.date)}</div>
+                  </div>
+                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Horário início</div>
+                    <div className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.startTime)}</div>
+                  </div>
+                  <div className="p-3">
+                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Horário término</div>
+                    <div className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.endTime)}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Endereço</label>
-              <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.address}</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Data</label>
-                <p className="text-gray-900 dark:text-gray-100">{formatDate(selectedDiary.date)}</p>
-              </div>
-              
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Início</label>
-                <p className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.startTime)}</p>
-              </div>
-              
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Término</label>
-                <p className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.endTime)}</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Serviços Executados</label>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">Serviços Executados</div>
+              <div className="p-3 sm:p-4">
                 <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.servicesExecuted}</p>
               </div>
             </div>
+
+            {/* Seções específicas PCE */}
+            {pceDetail && (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Tipo de Ensaio</div>
+                  <div className="p-3 text-gray-900 dark:text-gray-100">{pceDetail.ensaio_tipo}</div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Características das Estacas</div>
+                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {!loadingDetail && pcePiles.length === 0 && (
+                    <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
+                  )}
+                  <div className="space-y-3">
+                    {pcePiles.map((pile) => (
+                      <div key={pile.id} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{pile.estaca_nome || 'Estaca'}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Profundidade (m): </span>
+                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_profundidade_m ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Carga de trabalho (tf): </span>
+                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_carga_trabalho_tf ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Tipo de estaca: </span>
+                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_tipo ?? '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">Diâmetro (cm): </span>
+                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_diametro_cm ?? '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Tipo de Carregamento</div>
+                  <div className="p-3 text-gray-900 dark:text-gray-100">{Array.isArray(pceDetail.carregamento_tipos) && pceDetail.carregamento_tipos.length > 0 ? pceDetail.carregamento_tipos.join(', ') : '-'}</div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Equipamentos Utilizados</div>
+                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                    <div><span className="text-gray-500 dark:text-gray-400">Macaco: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_macaco ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Célula: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_celula ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Manômetro: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_manometro ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Relógios: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_relogios ?? '-'}</span></div>
+                    <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Conjunto de Vigas: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_conjunto_vigas ?? '-'}</span></div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Ocorrências</div>
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
+                    <p className="text-gray-900 dark:text-gray-100 break-words">{pceDetail.ocorrencias ?? '-'}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Equipamento de cravação</div>
+                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                    <div><span className="text-gray-500 dark:text-gray-400">Equipamento: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.cravacao_equipamento ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Horímetro: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.cravacao_horimetro ?? '-'}</span></div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Abastecimento</div>
+                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                    <div><span className="text-gray-500 dark:text-gray-400">Mobilização - Tanque (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_mobilizacao_litros_tanque ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Mobilização - Galão (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_mobilizacao_litros_galao ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Final do dia - Tanque (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_finaldia_litros_tanque ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Final do dia - Galão (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_finaldia_litros_galao ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Chegou diesel?: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_chegou_diesel == null ? '-' : (pceDetail.abastecimento_chegou_diesel ? 'Sim' : 'Não')}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Fornecido por: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_fornecido_por ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Quantidade (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_quantidade_litros ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Horário da chegada: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_horario_chegada ?? '-'}</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Seções específicas PIT */}
+            {pitDetail && (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Equipamento</div>
+                  <div className="p-3 text-gray-900 dark:text-gray-100">{pitDetail.equipamento || '-'}</div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Serviços executados (Estacas)</div>
+                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {!loadingDetail && pitPiles.length === 0 && (
+                    <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
+                  )}
+                  <div className="space-y-3">
+                    {pitPiles.map((pile) => (
+                      <div key={pile.id} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{pile.estaca_nome || 'Estaca'}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                          <div><span className="text-gray-500 dark:text-gray-400">Tipo: </span><span className="text-gray-900 dark:text-gray-100">{pile.estaca_tipo ?? '-'}</span></div>
+                          <div><span className="text-gray-500 dark:text-gray-400">Diâmetro (cm): </span><span className="text-gray-900 dark:text-gray-100">{pile.diametro_cm ?? '-'}</span></div>
+                          <div><span className="text-gray-500 dark:text-gray-400">Profundidade (cm): </span><span className="text-gray-900 dark:text-gray-100">{pile.profundidade_cm ?? '-'}</span></div>
+                          <div><span className="text-gray-500 dark:text-gray-400">Arrasamento (m): </span><span className="text-gray-900 dark:text-gray-100">{pile.arrasamento_m ?? '-'}</span></div>
+                          <div><span className="text-gray-500 dark:text-gray-400">Comprimento útil (m): </span><span className="text-gray-900 dark:text-gray-100">{pile.comprimento_util_m ?? '-'}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Ocorrências</div>
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
+                    <p className="text-gray-900 dark:text-gray-100 break-words">{pitDetail.ocorrencias ?? '-'}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Número total de estacas produzidas</div>
+                  <div className="p-3 text-gray-900 dark:text-gray-100">{pitDetail.total_estacas ?? '-'}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Seções específicas PLACA */}
+            {placaDetail && (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Pontos de Ensaio</div>
+                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {placaPiles && placaPiles.length > 0 ? (
+                    <div className="p-3">
+                      <div className="space-y-3">
+                        {placaPiles.map((point, idx) => (
+                          <div key={point.id || idx} className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-lg">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                              <div><span className="text-gray-500 dark:text-gray-400">Nome: </span><span className="text-gray-900 dark:text-gray-100 font-medium">{point.nome || '-'}</span></div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Carga 1 (kgf/cm²): </span><span className="text-gray-900 dark:text-gray-100">{point.carga_trabalho_1_kgf_cm2 || '-'}</span></div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Carga 2 (kgf/cm²): </span><span className="text-gray-900 dark:text-gray-100">{point.carga_trabalho_2_kgf_cm2 || '-'}</span></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 text-gray-500 dark:text-gray-400">Nenhum ponto de ensaio cadastrado</div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Equipamentos Utilizados</div>
+                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
+                    <div><span className="text-gray-500 dark:text-gray-400">Macaco: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_macaco ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Célula de carga: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_celula_carga ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Manômetro: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_manometro ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Placa (dimensões): </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_placa_dimensoes ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Equipamento de reação: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_equipamento_reacao ?? '-'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">Relógios: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_relogios ?? '-'}</span></div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Ocorrências</div>
+                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
+                    <p className="text-gray-900 dark:text-gray-100 break-words">{placaDetail.ocorrencias ?? '-'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
@@ -394,6 +813,11 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mb-3">
                     <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900 dark:text-white truncate group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors duration-200">{diary.clientName}</h3>
+                    {diary.type && (
+                      <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-xs font-medium rounded-full self-start">
+                        {diary.type}
+                      </span>
+                    )}
                     <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs font-medium rounded-full self-start hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors duration-200">
                       Finalizado
                     </span>
@@ -434,12 +858,20 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
                   {user?.role === 'admin' && (
                     <>
                       <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditDiary(diary);
+                        }}
                         className="p-1.5 sm:p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 hover:scale-110"
                         title="Editar"
                       >
                         <Edit className="w-4 h-4 sm:w-5 sm:h-5" />
                       </button>
                       <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDiary(diary);
+                        }}
                         className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 hover:scale-110"
                         title="Excluir"
                       >

@@ -20,7 +20,16 @@ export interface WorkDiary {
   clientId: string;
   clientName: string;
   address: string;
+  enderecoDetalhado?: {
+    estadoId: number;
+    estadoNome: string;
+    cidadeId: number;
+    cidadeNome: string;
+    rua: string;
+    numero: string;
+  };
   team: string;
+  type?: 'PCE' | 'PLACA' | 'PIT' | 'PDA';
   date: string;
   startTime: string;
   endTime: string;
