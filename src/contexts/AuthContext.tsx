@@ -98,8 +98,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string): Promise<{ ok: boolean; code?: string; message?: string }> => {
     setIsLoading(true);
     if (!isSupabaseConfigured) {
-      const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      // Recarregar usuários do localStorage para garantir dados atualizados
+      const storedUsers = localStorage.getItem('users');
+      let currentUsers = users;
+      if (storedUsers) {
+        try {
+          currentUsers = JSON.parse(storedUsers);
+        } catch {
+          currentUsers = defaultUsers;
+          localStorage.setItem('users', JSON.stringify(defaultUsers));
+        }
+      } else {
+        currentUsers = defaultUsers;
+        localStorage.setItem('users', JSON.stringify(defaultUsers));
+      }
+
+      // Normalizar email para comparação (trim e lowercase)
+      const normalizedEmail = email.trim().toLowerCase();
+      console.log('Tentando login com email:', normalizedEmail);
+      console.log('Usuários disponíveis:', currentUsers.map(u => u.email.toLowerCase()));
+      
+      const foundUser = currentUsers.find(u => u.email.trim().toLowerCase() === normalizedEmail);
       if (!foundUser) {
+        console.error('Usuário não encontrado. Email buscado:', normalizedEmail);
         setIsLoading(false);
         return { ok: false, code: 'user_not_found', message: 'Email não encontrado' };
       }
