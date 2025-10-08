@@ -17,6 +17,14 @@ interface TeamMember {
   email: string;
 }
 
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+}
+
 export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
@@ -92,16 +100,24 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
 
-  // Carregar assinatura do usuário e buscar membros da equipe
+  // Carregar assinatura do usuário e buscar membros da equipe e clientes
   useEffect(() => {
     const loadUserData = async () => {
       if (!isSupabaseConfigured || !user) {
         setTeamMembers([]);
+        // Clientes mock para modo local
+        setClients([
+          { id: '1', name: 'Construtora ABC Ltda', email: 'contato@abc.com.br', phone: '(11) 3333-4444', address: 'Av. Paulista, 1000 - São Paulo, SP' },
+          { id: '2', name: 'Incorporadora XYZ', email: 'projetos@xyz.com.br', phone: '(21) 5555-6666', address: 'Rua Copacabana, 200 - Rio de Janeiro, RJ' }
+        ]);
         return;
       }
 
       setLoadingTeam(true);
+      setLoadingClients(true);
       try {
         // Buscar perfil do usuário com assinatura digital
         const { data: userProfile, error: userError } = await supabase
@@ -115,6 +131,16 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
             ...prev,
             geotestSignatureImage: userProfile.signature_image_url || ''
           }));
+        }
+
+        // Buscar clientes cadastrados
+        const { data: clientsData, error: clientsError } = await supabase
+          .from('clients')
+          .select('*')
+          .order('name');
+
+        if (!clientsError && clientsData) {
+          setClients(clientsData);
         }
 
         // Buscar todos os usuários para formar a equipe
@@ -135,8 +161,10 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
       } catch (err: any) {
         console.error('Erro ao carregar dados do usuário:', err);
         setTeamMembers([]);
+        setClients([]);
       } finally {
         setLoadingTeam(false);
+        setLoadingClients(false);
       }
     };
 
@@ -496,14 +524,31 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                   Cliente *
                 </label>
-                <input
-                  type="text"
-                  value={formData.clientName}
-                  onChange={(e) => handleChange('clientName', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Nome do cliente"
-                  required
-                />
+                {loadingClients ? (
+                  <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 flex items-center">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Carregando clientes...
+                  </div>
+                ) : (
+                  <select
+                    value={formData.clientName}
+                    onChange={(e) => handleChange('clientName', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Selecione um cliente</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.name}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {clients.length === 0 && !loadingClients && (
+                  <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+                    Nenhum cliente cadastrado. {user?.role === 'admin' && 'Cadastre clientes na seção "Clientes".'}
+                  </p>
+                )}
               </div>
               
             <div>
