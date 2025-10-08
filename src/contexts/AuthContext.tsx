@@ -29,6 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
+      console.log('🔄 Inicializando AuthContext (modo local)');
       // Carregar lista de usuários do storage (com defaults se vazio)
       const storedUsers = localStorage.getItem('users');
       if (storedUsers) {
@@ -44,10 +45,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       // Restaurar currentUser
       const storedCurrent = localStorage.getItem('currentUser');
+      console.log('🔍 Verificando currentUser no localStorage:', storedCurrent ? 'Encontrado' : 'Não encontrado');
       if (storedCurrent) {
         try {
-          setUser(JSON.parse(storedCurrent));
-        } catch {}
+          const parsedUser = JSON.parse(storedCurrent);
+          console.log('👤 Restaurando usuário:', parsedUser.email);
+          setUser(parsedUser);
+        } catch {
+          console.error('❌ Erro ao parsear currentUser');
+        }
+      } else {
+        console.log('🔓 Nenhum usuário logado - mostrando tela de login');
       }
       setIsLoading(false);
       return;
@@ -199,15 +207,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    console.log('🚪 Fazendo logout...');
     if (!isSupabaseConfigured) {
+      console.log('📦 Removendo usuário do localStorage');
       setUser(null);
       localStorage.removeItem('currentUser');
-      // Recarregar a página para garantir que volta para a tela de login
-      window.location.reload();
+      console.log('✅ currentUser removido:', localStorage.getItem('currentUser'));
+      // Forçar limpeza e redirect
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
       return;
     }
     supabase.auth.signOut().then(() => {
-      window.location.reload();
+      window.location.href = '/';
     });
   };
 
