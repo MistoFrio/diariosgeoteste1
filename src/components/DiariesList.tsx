@@ -259,28 +259,23 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
           setPitPiles([]);
         }
 
-        // Buscar PLACA por diary_id (apenas se for tipo PLACA)
-        if (selectedDiary.type === 'PLACA') {
-          const { data: placa, error: placaErr } = await supabase
-            .from('work_diaries_placa')
-            .select('id, equipamentos_macaco, equipamentos_celula_carga, equipamentos_manometro, equipamentos_placa_dimensoes, equipamentos_equipamento_reacao, equipamentos_relogios, ocorrencias')
-            .eq('diary_id', selectedDiary.id)
-            .maybeSingle();
-          if (placaErr) throw placaErr;
-          setPlacaDetail(placa || null);
-          if (placa?.id) {
-            const { data: placaTestPoints, error: placaTestPointsErr } = await supabase
-              .from('work_diaries_placa_piles')
-              .select('id, ordem, nome, carga_trabalho_1_kgf_cm2, carga_trabalho_2_kgf_cm2')
-              .eq('placa_id', placa.id)
-              .order('ordem', { ascending: true });
-            if (placaTestPointsErr) throw placaTestPointsErr;
-            setPlacaPiles(placaTestPoints || []);
-          } else {
-            setPlacaPiles([]);
-          }
+        // Buscar PLACA por diary_id
+        const { data: placa, error: placaErr } = await supabase
+          .from('work_diaries_placa')
+          .select('id, equipamentos_macaco, equipamentos_celula_carga, equipamentos_manometro, equipamentos_placa_dimensoes, equipamentos_equipamento_reacao, equipamentos_relogios, ocorrencias')
+          .eq('diary_id', selectedDiary.id)
+          .maybeSingle();
+        if (placaErr) throw placaErr;
+        setPlacaDetail(placa || null);
+        if (placa?.id) {
+          const { data: placaTestPoints, error: placaTestPointsErr } = await supabase
+            .from('work_diaries_placa_piles')
+            .select('id, ordem, nome, carga_trabalho_1_kgf_cm2, carga_trabalho_2_kgf_cm2')
+            .eq('placa_id', placa.id)
+            .order('ordem', { ascending: true});
+          if (placaTestPointsErr) throw placaTestPointsErr;
+          setPlacaPiles(placaTestPoints || []);
         } else {
-          setPlacaDetail(null);
           setPlacaPiles([]);
         }
       } catch (e: any) {
@@ -293,6 +288,16 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
         setPlacaPiles([]);
       } finally {
         setLoadingDetail(false);
+        // Log para debug
+        console.log('📋 Detalhes carregados:', {
+          tipo: selectedDiary?.type,
+          pceDetail: !!pceDetail,
+          pitDetail: !!pitDetail,
+          placaDetail: !!placaDetail,
+          pcePiles: pcePiles.length,
+          pitPiles: pitPiles.length,
+          placaPiles: placaPiles.length
+        });
       }
     };
     fetchDetail();
@@ -300,6 +305,24 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
   const handleExport = async () => {
     if (!detailsRef.current || !selectedDiary) return;
+    
+    // Log para debug - verificar se os detalhes específicos estão carregados
+    console.log('📄 Gerando PDF para diário tipo:', selectedDiary.type);
+    console.log('📊 Dados específicos disponíveis:', {
+      pceDetail: !!pceDetail,
+      pcePiles: pcePiles.length,
+      pitDetail: !!pitDetail, 
+      pitPiles: pitPiles.length,
+      placaDetail: !!placaDetail,
+      placaPiles: placaPiles.length
+    });
+    
+    // Aguardar para garantir que os dados específicos foram carregados
+    if (loadingDetail) {
+      alert('Aguarde o carregamento dos detalhes...');
+      return;
+    }
+    
     const safeClient = selectedDiary.clientName.replace(/[^a-z0-9\-\_\s]/gi, '').replace(/\s+/g, '-');
     const fileName = `diario-${safeClient}-${selectedDiary.date}.pdf`;
     await exportElementToPDF(detailsRef.current, fileName, {
