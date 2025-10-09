@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, Calendar, Clock, User, MapPin, FileText, Eye, Edit, Trash2, Download } from 'lucide-react';
+import { Search, Calendar, Clock, User, MapPin, FileText, Eye, Edit, Trash2, Download, FileSpreadsheet } from 'lucide-react';
 import { WorkDiary } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportElementToPDF } from '../utils/pdf';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { downloadCsv, mapDiaryToCsvRow } from '../utils/csv';
+import { downloadExcel, mapDiaryToExcelRow } from '../utils/excel';
 
 // Tipagem local para exibição
 type DiaryRow = WorkDiary;
@@ -18,6 +19,7 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
   const [selectedDiary, setSelectedDiary] = useState<DiaryRow | null>(null);
   const [rows, setRows] = useState<DiaryRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,14 +40,32 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
       diary.address.toLowerCase().includes(term) ||
       diary.servicesExecuted.toLowerCase().includes(term);
 
+    // Filtro de cliente
+    const matchesClient = clientFilter === '' || diary.clientName === clientFilter;
+
     // Datas no formato YYYY-MM-DD permitem comparação lexicográfica simples
     const d = diary.date;
     const afterStart = startDate ? d >= startDate : true;
     const beforeEnd = endDate ? d <= endDate : true;
     const withinRange = afterStart && beforeEnd;
 
-    return matchesQuery && withinRange;
+    return matchesQuery && matchesClient && withinRange;
   });
+
+  // Lista única de clientes para o filtro
+  const uniqueClients = Array.from(new Set(rows.map(d => d.clientName))).sort();
+
+  // Função para exportar para Excel
+  const handleExportExcel = () => {
+    if (filteredDiaries.length === 0) {
+      alert('Não há diários para exportar com os filtros aplicados');
+      return;
+    }
+
+    const excelRows = filteredDiaries.map(mapDiaryToExcelRow);
+    const fileName = `Diarios_${new Date().toISOString().split('T')[0]}`;
+    downloadExcel(fileName, excelRows);
+  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR');
@@ -780,10 +800,37 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
               </div>
             </div>
 
+            {/* Filtro de Cliente */}
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label htmlFor="client-filter" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Cliente
+              </label>
+              <select
+                id="client-filter"
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="">Todos os clientes</option>
+                {uniqueClients.map((client) => (
+                  <option key={client} value={client}>{client}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Ações */}
-            <div className="sm:col-span-2 lg:col-span-1 flex gap-2">
+            <div className="sm:col-span-2 lg:col-span-1 flex flex-col gap-2">
               <button
-                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); }}
+                onClick={handleExportExcel}
+                disabled={filteredDiaries.length === 0}
+                className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-1.5"
+                title="Exportar para Excel"
+              >
+                <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span>Exportar Excel</span>
+              </button>
+              <button
+                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setClientFilter(''); }}
                 className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-600 hover:scale-105 transition-all duration-200"
                 title="Limpar filtros"
               >
