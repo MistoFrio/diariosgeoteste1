@@ -32,19 +32,19 @@ const AppContent: React.FC = () => {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onPageChange={setCurrentPage} />;
       case 'diaries':
         return <DiariesList onNewDiary={() => setCurrentPage('new-diary')} />;
       case 'new-diary':
         return <NewDiary onBack={() => setCurrentPage('diaries')} />;
       case 'clients':
-        return user.role === 'admin' ? <ClientsManagement /> : <Dashboard />;
+        return user.role === 'admin' ? <ClientsManagement /> : <Dashboard onPageChange={setCurrentPage} />;
       case 'users':
-        return user.role === 'admin' ? <UsersManagement /> : <Dashboard />;
+        return user.role === 'admin' ? <UsersManagement /> : <Dashboard onPageChange={setCurrentPage} />;
       case 'profile':
         return <ProfilePage />;
       default:
-        return <Dashboard />;
+        return <Dashboard onPageChange={setCurrentPage} />;
     }
   };
 

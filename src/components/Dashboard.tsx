@@ -3,7 +3,11 @@ import { FileText, Users, Building2, TrendingUp, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onPageChange?: (page: string) => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
   const { user } = useAuth();
   const [stats, setStats] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
@@ -143,6 +147,28 @@ export const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, [user]);
 
+  // Função para mapear labels para páginas
+  const getPageFromLabel = (label: string): string | null => {
+    const labelToPageMap: Record<string, string> = {
+      'Diários Criados': 'diaries',
+      'Diários Geoteste': 'diaries',
+      'Meus Diários': 'diaries',
+      'Usuários Ativos': 'users',
+      'Clientes': 'clients',
+      'Último Diário': 'diaries',
+      'Esta Semana': 'diaries',
+    };
+    return labelToPageMap[label] || null;
+  };
+
+  const handleCardClick = (label: string) => {
+    if (!onPageChange) return;
+    const page = getPageFromLabel(label);
+    if (page) {
+      onPageChange(page);
+    }
+  };
+
   // Fallback para dados mock se não houver dados
   const fallbackStats = user?.role === 'admin' ? [
     { label: 'Diários Criados', value: '0', icon: FileText, color: 'green' },
@@ -221,14 +247,20 @@ export const Dashboard: React.FC = () => {
             orange: 'bg-orange-500'
           };
           
+          const isClickable = getPageFromLabel(stat.label) !== null;
+          
           return (
-            <div key={index} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 hover:scale-[1.02] transition-all duration-200 cursor-pointer">
+            <div 
+              key={index} 
+              onClick={() => isClickable && handleCardClick(stat.label)}
+              className={`bg-white dark:bg-gray-900 rounded-xl shadow-sm p-4 sm:p-6 border border-gray-100 dark:border-gray-800 hover:shadow-md hover:border-gray-200 dark:hover:border-gray-700 hover:scale-[1.02] transition-all duration-200 ${isClickable ? 'cursor-pointer' : 'cursor-default'}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">{stat.label}</p>
                   <p className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
                 </div>
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colorMap[stat.color as keyof typeof colorMap]} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-200`}>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 ${colorMap[stat.color as keyof typeof colorMap]} rounded-lg flex items-center justify-center transition-transform duration-200 ${isClickable ? 'group-hover:scale-110' : ''}`}>
                   <Icon className="text-white w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
               </div>
@@ -252,7 +284,11 @@ export const Dashboard: React.FC = () => {
           ) : (
           <div className="space-y-3 sm:space-y-4">
               {(activities.length > 0 ? activities : fallbackActivities).map((activity, index) => (
-              <div key={index} className="flex items-start space-x-2 sm:space-x-3 p-2 sm:p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm hover:scale-[1.01] transition-all duration-200 cursor-pointer">
+              <div 
+                key={index} 
+                onClick={() => onPageChange?.('diaries')}
+                className="flex items-start space-x-2 sm:space-x-3 p-2 sm:p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm hover:scale-[1.01] transition-all duration-200 cursor-pointer"
+              >
                 <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0 group-hover:scale-125 transition-transform duration-200"></div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm sm:text-base font-medium text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors duration-200">{activity.title}</p>
