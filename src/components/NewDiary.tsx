@@ -21,9 +21,9 @@ interface TeamMember {
 interface Client {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  address: string;
+  email?: string;
+  phone?: string;
+  address?: string;
 }
 
 export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
@@ -31,7 +31,6 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
   const [formData, setFormData] = useState({
     type: 'PCE',
     clientName: '',
-    address: '',
     team: '',
     date: '',
     startTime: '',
@@ -210,17 +209,24 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
         return;
       }
 
-      // Montar endereço detalhado se preenchido
-      let enderecoCompleto = formData.address.trim();
-      if (enderecoDetalhado.estadoId > 0 && enderecoDetalhado.cidadeId > 0) {
-        const estado = getEstadoById(enderecoDetalhado.estadoId);
-        const cidade = getCidadeById(enderecoDetalhado.estadoId, enderecoDetalhado.cidadeId);
-        
-        if (estado && cidade) {
-          const enderecoDetalhadoText = `${enderecoDetalhado.rua.trim()}, ${enderecoDetalhado.numero.trim()}, ${cidade.nome}, ${estado.nome}`;
-          enderecoCompleto = enderecoDetalhadoText;
-        }
+      // Validar endereço detalhado obrigatório
+      if (!enderecoDetalhado.estadoId || !enderecoDetalhado.cidadeId || !enderecoDetalhado.rua.trim() || !enderecoDetalhado.numero.trim()) {
+        setError('Por favor, preencha todos os campos do endereço (Estado, Cidade, Rua e Número)');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Montar endereço completo a partir do endereço detalhado
+      const estado = getEstadoById(enderecoDetalhado.estadoId);
+      const cidade = getCidadeById(enderecoDetalhado.estadoId, enderecoDetalhado.cidadeId);
+      
+      if (!estado || !cidade) {
+        setError('Estado ou cidade inválidos');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const enderecoCompleto = `${enderecoDetalhado.rua.trim()}, ${enderecoDetalhado.numero.trim()}, ${cidade.nome}, ${estado.nome}`;
 
       const payload = {
         user_id: user.id,
@@ -609,37 +615,21 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
             </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                Endereço *
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => handleChange('address', e.target.value)}
-                  rows={2}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  placeholder="Endereço completo da obra (ou use os campos detalhados abaixo)"
-                  required
-                />
-              </div>
-            </div>
-
             {/* Endereço Detalhado */}
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
-                Endereço Detalhado (Opcional)
+                Endereço *
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Estado
+                    Estado *
                   </label>
                   <select
                     value={enderecoDetalhado.estadoId}
                     onChange={(e) => handleEstadoChange(Number(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                    required
                   >
                     <option value={0}>Selecione o estado</option>
                     {estados.map((estado) => (
@@ -652,13 +642,14 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Cidade
+                    Cidade *
                   </label>
                   <select
                     value={enderecoDetalhado.cidadeId}
                     onChange={(e) => handleEnderecoChange('cidadeId', Number(e.target.value))}
                     disabled={enderecoDetalhado.estadoId === 0}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    required
                   >
                     <option value={0}>Selecione a cidade</option>
                     {cidades.map((cidade) => (
@@ -671,7 +662,7 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Rua
+                    Rua *
                   </label>
                   <input
                     type="text"
@@ -679,12 +670,13 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
                     onChange={(e) => handleEnderecoChange('rua', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                     placeholder="Nome da rua"
+                    required
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Número
+                    Número *
                   </label>
                   <input
                     type="text"
@@ -692,6 +684,7 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
                     onChange={(e) => handleEnderecoChange('numero', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                     placeholder="Número"
+                    required
                   />
                 </div>
               </div>

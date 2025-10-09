@@ -13,6 +13,7 @@ export type DiaryExcelRow = {
   'Assinatura Responsável': string;
   Observações: string;
   'Criado em': string;
+  [key: string]: any; // Permite campos dinâmicos para dados específicos
 };
 
 export function downloadExcel(fileName: string, rows: DiaryExcelRow[]): void {
@@ -24,21 +25,19 @@ export function downloadExcel(fileName: string, rows: DiaryExcelRow[]): void {
   // Criar uma nova planilha
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  // Ajustar largura das colunas
-  const columnWidths = [
-    { wch: 12 }, // Tipo
-    { wch: 30 }, // Cliente
-    { wch: 40 }, // Endereco
-    { wch: 25 }, // Equipe
-    { wch: 12 }, // Data
-    { wch: 10 }, // Inicio
-    { wch: 10 }, // Termino
-    { wch: 50 }, // Serviços Executados
-    { wch: 20 }, // Assinatura Geoteste
-    { wch: 20 }, // Assinatura Responsável
-    { wch: 40 }, // Observações
-    { wch: 18 }, // Criado em
-  ];
+  // Ajustar largura das colunas dinamicamente
+  const maxWidths: { [key: string]: number } = {};
+  
+  // Calcular largura máxima para cada coluna
+  rows.forEach(row => {
+    Object.keys(row).forEach(key => {
+      const value = String(row[key] || '');
+      const width = Math.max(key.length, value.length);
+      maxWidths[key] = Math.max(maxWidths[key] || 10, Math.min(width, 50));
+    });
+  });
+
+  const columnWidths = Object.keys(rows[0]).map(key => ({ wch: maxWidths[key] || 15 }));
   worksheet['!cols'] = columnWidths;
 
   // Criar um novo workbook e adicionar a planilha
@@ -63,8 +62,14 @@ export function mapDiaryToExcelRow(d: {
   responsibleSignature: string;
   observations?: string;
   createdAt: string;
+  pceDetail?: any;
+  pcePiles?: any[];
+  pitDetail?: any;
+  pitPiles?: any[];
+  placaDetail?: any;
+  placaPiles?: any[];
 }): DiaryExcelRow {
-  return {
+  const baseRow: DiaryExcelRow = {
     Tipo: d.type ?? '',
     Cliente: d.clientName,
     Endereco: d.address,
@@ -78,5 +83,66 @@ export function mapDiaryToExcelRow(d: {
     Observações: d.observations ?? '',
     'Criado em': new Date(d.createdAt).toLocaleDateString('pt-BR') + ' ' + new Date(d.createdAt).toLocaleTimeString('pt-BR'),
   };
+
+  // Adicionar dados específicos de PCE
+  if (d.type === 'PCE' && d.pceDetail) {
+    baseRow['PCE - Tipo de Ensaio'] = d.pceDetail.ensaio_tipo || '';
+    baseRow['PCE - Tipos de Carregamento'] = d.pceDetail.carregamento_tipos?.join(', ') || '';
+    baseRow['PCE - Macaco'] = d.pceDetail.equipamentos_macaco || '';
+    baseRow['PCE - Célula'] = d.pceDetail.equipamentos_celula || '';
+    baseRow['PCE - Manômetro'] = d.pceDetail.equipamentos_manometro || '';
+    baseRow['PCE - Relógios'] = d.pceDetail.equipamentos_relogios || '';
+    baseRow['PCE - Conjunto de Vigas'] = d.pceDetail.equipamentos_conjunto_vigas || '';
+    baseRow['PCE - Ocorrências'] = d.pceDetail.ocorrencias || '';
+    
+    if (d.pceDetail.cravacao_equipamento) {
+      baseRow['PCE - Equipamento de Cravação'] = d.pceDetail.cravacao_equipamento || '';
+      baseRow['PCE - Horímetro'] = d.pceDetail.cravacao_horimetro || '';
+    }
+    
+    if (d.pceDetail.abastecimento_chegou_diesel) {
+      baseRow['PCE - Chegou Diesel'] = d.pceDetail.abastecimento_chegou_diesel || '';
+      baseRow['PCE - Fornecido Por'] = d.pceDetail.abastecimento_fornecido_por || '';
+      baseRow['PCE - Quantidade Litros'] = d.pceDetail.abastecimento_quantidade_litros || '';
+    }
+
+    if (d.pcePiles && d.pcePiles.length > 0) {
+      baseRow['PCE - Estacas'] = d.pcePiles.map((p: any) => 
+        `${p.nome}: ${p.profundidade_m}m, ${p.tipo}, ${p.carga_trabalho_tf}tf, Ø${p.diametro_cm}cm`
+      ).join(' | ');
+    }
+  }
+
+  // Adicionar dados específicos de PIT
+  if (d.type === 'PIT' && d.pitDetail) {
+    baseRow['PIT - Equipamento'] = d.pitDetail.equipamento || '';
+    baseRow['PIT - Total de Estacas'] = d.pitDetail.total_estacas || '';
+    baseRow['PIT - Ocorrências'] = d.pitDetail.ocorrencias || '';
+    
+    if (d.pitPiles && d.pitPiles.length > 0) {
+      baseRow['PIT - Estacas'] = d.pitPiles.map((p: any) => 
+        `${p.nome}: ${p.tipo}, Ø${p.diametro_cm}cm, Prof: ${p.profundidade_cm}cm, Arr: ${p.arrasamento_m}m, Útil: ${p.comprimento_util_m}m`
+      ).join(' | ');
+    }
+  }
+
+  // Adicionar dados específicos de PLACA
+  if (d.type === 'PLACA' && d.placaDetail) {
+    baseRow['PLACA - Macaco'] = d.placaDetail.equipamentos_macaco || '';
+    baseRow['PLACA - Célula de Carga'] = d.placaDetail.equipamentos_celula_carga || '';
+    baseRow['PLACA - Manômetro'] = d.placaDetail.equipamentos_manometro || '';
+    baseRow['PLACA - Dimensões da Placa'] = d.placaDetail.equipamentos_placa_dimensoes || '';
+    baseRow['PLACA - Equipamento de Reação'] = d.placaDetail.equipamentos_equipamento_reacao || '';
+    baseRow['PLACA - Relógios'] = d.placaDetail.equipamentos_relogios || '';
+    baseRow['PLACA - Ocorrências'] = d.placaDetail.ocorrencias || '';
+    
+    if (d.placaPiles && d.placaPiles.length > 0) {
+      baseRow['PLACA - Pontos de Teste'] = d.placaPiles.map((p: any) => 
+        `${p.nome}: ${p.carga_trabalho_1_kgf_cm2}kgf/cm² / ${p.carga_trabalho_2_kgf_cm2}kgf/cm²`
+      ).join(' | ');
+    }
+  }
+
+  return baseRow;
 }
 

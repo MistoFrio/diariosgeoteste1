@@ -20,6 +20,7 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [clientFilter, setClientFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [selectedDiary, setSelectedDiary] = useState<DiaryRow | null>(null);
   const [rows, setRows] = useState<DiaryRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,28 +44,132 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
     // Filtro de cliente
     const matchesClient = clientFilter === '' || diary.clientName === clientFilter;
 
+    // Filtro de tipo de diário (PCE, PIT, PLACA, PDA)
+    const matchesType = typeFilter === '' || diary.type === typeFilter;
+
     // Datas no formato YYYY-MM-DD permitem comparação lexicográfica simples
     const d = diary.date;
     const afterStart = startDate ? d >= startDate : true;
     const beforeEnd = endDate ? d <= endDate : true;
     const withinRange = afterStart && beforeEnd;
 
-    return matchesQuery && matchesClient && withinRange;
+    return matchesQuery && matchesClient && matchesType && withinRange;
   });
 
   // Lista única de clientes para o filtro
   const uniqueClients = Array.from(new Set(rows.map(d => d.clientName))).sort();
 
-  // Função para exportar para Excel
-  const handleExportExcel = () => {
+  // Função para exportar para Excel com dados completos
+  const handleExportExcel = async () => {
     if (filteredDiaries.length === 0) {
       alert('Não há diários para exportar com os filtros aplicados');
       return;
     }
 
-    const excelRows = filteredDiaries.map(mapDiaryToExcelRow);
-    const fileName = `Diarios_${new Date().toISOString().split('T')[0]}`;
-    downloadExcel(fileName, excelRows);
+    if (!isSupabaseConfigured) {
+      // Modo local - exportar sem detalhes específicos
+      const excelRows = filteredDiaries.map(mapDiaryToExcelRow);
+      const fileName = `Diarios_${new Date().toISOString().split('T')[0]}`;
+      downloadExcel(fileName, excelRows);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Buscar detalhes específicos para cada diário
+      const diariesWithDetails = await Promise.all(
+        filteredDiaries.map(async (diary) => {
+          let pceDetail = null;
+          let pcePiles: any[] = [];
+          let pitDetail = null;
+          let pitPiles: any[] = [];
+          let placaDetail = null;
+          let placaPiles: any[] = [];
+
+          // Buscar dados específicos de PCE
+          if (diary.type === 'PCE') {
+            const { data: pce } = await supabase
+              .from('work_diaries_pce')
+              .select('*')
+              .eq('diary_id', diary.id)
+              .maybeSingle();
+            
+            pceDetail = pce;
+            
+            if (pce?.id) {
+              const { data: piles } = await supabase
+                .from('work_diaries_pce_piles')
+                .select('*')
+                .eq('pce_id', pce.id)
+                .order('ordem', { ascending: true });
+              pcePiles = piles || [];
+            }
+          }
+
+          // Buscar dados específicos de PIT
+          if (diary.type === 'PIT') {
+            const { data: pit } = await supabase
+              .from('work_diaries_pit')
+              .select('*')
+              .eq('diary_id', diary.id)
+              .maybeSingle();
+            
+            pitDetail = pit;
+            
+            if (pit?.id) {
+              const { data: piles } = await supabase
+                .from('work_diaries_pit_piles')
+                .select('*')
+                .eq('pit_id', pit.id)
+                .order('ordem', { ascending: true });
+              pitPiles = piles || [];
+            }
+          }
+
+          // Buscar dados específicos de PLACA
+          if (diary.type === 'PLACA') {
+            const { data: placa } = await supabase
+              .from('work_diaries_placa')
+              .select('*')
+              .eq('diary_id', diary.id)
+              .maybeSingle();
+            
+            placaDetail = placa;
+            
+            if (placa?.id) {
+              const { data: piles } = await supabase
+                .from('work_diaries_placa_piles')
+                .select('*')
+                .eq('placa_id', placa.id)
+                .order('ordem', { ascending: true });
+              placaPiles = piles || [];
+            }
+          }
+
+          return {
+            ...diary,
+            pceDetail,
+            pcePiles,
+            pitDetail,
+            pitPiles,
+            placaDetail,
+            placaPiles,
+          };
+        })
+      );
+
+      // Mapear para linhas do Excel
+      const excelRows = diariesWithDetails.map(mapDiaryToExcelRow);
+      const fileName = `Diarios_${new Date().toISOString().split('T')[0]}`;
+      downloadExcel(fileName, excelRows);
+    } catch (err: any) {
+      console.error('Erro ao exportar:', err);
+      setError('Erro ao exportar diários: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -204,6 +309,7 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
     fetchDiaries();
   }, [user, startDate, endDate, searchTerm]);
 
+
   // Carregar dados específicos (PCE, PIT, PLACA) quando abrir um diário
   useEffect(() => {
     const fetchDetail = async () => {
@@ -259,23 +365,28 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
           setPitPiles([]);
         }
 
-        // Buscar PLACA por diary_id
-        const { data: placa, error: placaErr } = await supabase
-          .from('work_diaries_placa')
-          .select('id, equipamentos_macaco, equipamentos_celula_carga, equipamentos_manometro, equipamentos_placa_dimensoes, equipamentos_equipamento_reacao, equipamentos_relogios, ocorrencias')
-          .eq('diary_id', selectedDiary.id)
-          .maybeSingle();
-        if (placaErr) throw placaErr;
-        setPlacaDetail(placa || null);
-        if (placa?.id) {
-          const { data: placaTestPoints, error: placaTestPointsErr } = await supabase
-            .from('work_diaries_placa_piles')
-            .select('id, ordem, nome, carga_trabalho_1_kgf_cm2, carga_trabalho_2_kgf_cm2')
-            .eq('placa_id', placa.id)
-            .order('ordem', { ascending: true});
-          if (placaTestPointsErr) throw placaTestPointsErr;
-          setPlacaPiles(placaTestPoints || []);
+        // Buscar PLACA por diary_id (apenas se for tipo PLACA)
+        if (selectedDiary.type === 'PLACA') {
+          const { data: placa, error: placaErr } = await supabase
+            .from('work_diaries_placa')
+            .select('id, equipamentos_macaco, equipamentos_celula_carga, equipamentos_manometro, equipamentos_placa_dimensoes, equipamentos_equipamento_reacao, equipamentos_relogios, ocorrencias')
+            .eq('diary_id', selectedDiary.id)
+            .maybeSingle();
+          if (placaErr) throw placaErr;
+          setPlacaDetail(placa || null);
+          if (placa?.id) {
+            const { data: placaTestPoints, error: placaTestPointsErr } = await supabase
+              .from('work_diaries_placa_piles')
+              .select('id, ordem, nome, carga_trabalho_1_kgf_cm2, carga_trabalho_2_kgf_cm2')
+              .eq('placa_id', placa.id)
+              .order('ordem', { ascending: true });
+            if (placaTestPointsErr) throw placaTestPointsErr;
+            setPlacaPiles(placaTestPoints || []);
+          } else {
+            setPlacaPiles([]);
+          }
         } else {
+          setPlacaDetail(null);
           setPlacaPiles([]);
         }
       } catch (e: any) {
@@ -288,16 +399,6 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
         setPlacaPiles([]);
       } finally {
         setLoadingDetail(false);
-        // Log para debug
-        console.log('📋 Detalhes carregados:', {
-          tipo: selectedDiary?.type,
-          pceDetail: !!pceDetail,
-          pitDetail: !!pitDetail,
-          placaDetail: !!placaDetail,
-          pcePiles: pcePiles.length,
-          pitPiles: pitPiles.length,
-          placaPiles: placaPiles.length
-        });
       }
     };
     fetchDetail();
@@ -305,24 +406,6 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
   const handleExport = async () => {
     if (!detailsRef.current || !selectedDiary) return;
-    
-    // Log para debug - verificar se os detalhes específicos estão carregados
-    console.log('📄 Gerando PDF para diário tipo:', selectedDiary.type);
-    console.log('📊 Dados específicos disponíveis:', {
-      pceDetail: !!pceDetail,
-      pcePiles: pcePiles.length,
-      pitDetail: !!pitDetail, 
-      pitPiles: pitPiles.length,
-      placaDetail: !!placaDetail,
-      placaPiles: placaPiles.length
-    });
-    
-    // Aguardar para garantir que os dados específicos foram carregados
-    if (loadingDetail) {
-      alert('Aguarde o carregamento dos detalhes...');
-      return;
-    }
-    
     const safeClient = selectedDiary.clientName.replace(/[^a-z0-9\-\_\s]/gi, '').replace(/\s+/g, '-');
     const fileName = `diario-${safeClient}-${selectedDiary.date}.pdf`;
     await exportElementToPDF(detailsRef.current, fileName, {
@@ -841,19 +924,38 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
               </select>
             </div>
 
+            {/* Filtro de Tipo de Diário */}
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label htmlFor="type-filter" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Tipo de Diário
+              </label>
+              <select
+                id="type-filter"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="">Todos os tipos</option>
+                <option value="PCE">PCE</option>
+                <option value="PIT">PIT</option>
+                <option value="PLACA">PLACA</option>
+                <option value="PDA">PDA</option>
+              </select>
+            </div>
+
             {/* Ações */}
             <div className="sm:col-span-2 lg:col-span-1 flex flex-col gap-2">
               <button
                 onClick={handleExportExcel}
-                disabled={filteredDiaries.length === 0}
+                disabled={filteredDiaries.length === 0 || loading}
                 className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-1.5"
                 title="Exportar para Excel"
               >
                 <FileSpreadsheet className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span>Exportar Excel</span>
+                <span>{loading ? 'Exportando...' : 'Exportar Excel'}</span>
               </button>
               <button
-                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setClientFilter(''); }}
+                onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setClientFilter(''); setTypeFilter(''); }}
                 className="w-full px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-600 hover:scale-105 transition-all duration-200"
                 title="Limpar filtros"
               >
