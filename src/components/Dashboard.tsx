@@ -25,7 +25,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
           { label: 'Clientes', value: '0', icon: Building2, color: 'purple' },
           { label: 'Este Mês', value: '0%', icon: TrendingUp, color: 'orange' },
         ] : [
-          { label: 'Diários Geoteste', value: '0', icon: FileText, color: 'green' },
+          { label: 'Meus Diários', value: '0', icon: FileText, color: 'green' },
           { label: 'Esta Semana', value: '0', icon: TrendingUp, color: 'blue' },
           { label: 'Último Diário', value: 'Nunca', icon: FileText, color: 'purple' },
         ]);
@@ -40,17 +40,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
       try {
         // Buscar estatísticas
         if (user.role === 'admin') {
-          // Admin: buscar todos os diários e usuários
-          const [diariesRes, usersRes] = await Promise.all([
+          // Admin: buscar todos os diários, usuários e clientes
+          const [diariesRes, usersRes, clientsRes] = await Promise.all([
             supabase.from('work_diaries').select('id, created_at, client_name'),
-            supabase.from('profiles').select('id, created_at')
+            supabase.from('profiles').select('id, created_at'),
+            supabase.from('clients').select('id')
           ]);
 
           if (diariesRes.error) throw diariesRes.error;
           if (usersRes.error) throw usersRes.error;
+          // Clientes podem não ter tabela ainda, então não lançar erro
 
           const totalDiaries = diariesRes.data?.length || 0;
           const totalUsers = usersRes.data?.length || 0;
+          const totalClients = clientsRes.data?.length || 0;
 
           // Calcular crescimento do mês
           const now = new Date();
@@ -70,14 +73,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
           setStats([
             { label: 'Diários Criados', value: totalDiaries.toString(), icon: FileText, color: 'green' },
             { label: 'Usuários Ativos', value: totalUsers.toString(), icon: Users, color: 'blue' },
-            { label: 'Clientes', value: '0', icon: Building2, color: 'purple' }, // TODO: implementar tabela de clientes
+            { label: 'Clientes', value: totalClients.toString(), icon: Building2, color: 'purple' },
             { label: 'Este Mês', value: `${growth >= 0 ? '+' : ''}${growth}%`, icon: TrendingUp, color: 'orange' },
           ]);
         } else {
-          // Usuário comum: buscar todos os diários (mesmo que admin)
+          // Usuário comum: buscar apenas seus próprios diários
           const [diariesRes, recentDiariesRes] = await Promise.all([
-            supabase.from('work_diaries').select('id, created_at, client_name'),
-            supabase.from('work_diaries').select('id, created_at, client_name').order('created_at', { ascending: false }).limit(3)
+            supabase.from('work_diaries').select('id, created_at, client_name').eq('user_id', user.id),
+            supabase.from('work_diaries').select('id, created_at, client_name').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3)
           ]);
 
           if (diariesRes.error) throw diariesRes.error;
@@ -94,7 +97,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
           const lastDiaryDate = lastDiary ? new Date(lastDiary.created_at).toLocaleDateString('pt-BR') : 'Nunca';
 
           setStats([
-            { label: 'Diários Geoteste', value: totalDiaries.toString(), icon: FileText, color: 'green' },
+            { label: 'Meus Diários', value: totalDiaries.toString(), icon: FileText, color: 'green' },
             { label: 'Esta Semana', value: thisWeek.toString(), icon: TrendingUp, color: 'blue' },
             { label: 'Último Diário', value: lastDiaryDate, icon: FileText, color: 'purple' },
           ]);
@@ -151,7 +154,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
   const getPageFromLabel = (label: string): string | null => {
     const labelToPageMap: Record<string, string> = {
       'Diários Criados': 'diaries',
-      'Diários Geoteste': 'diaries',
       'Meus Diários': 'diaries',
       'Usuários Ativos': 'users',
       'Clientes': 'clients',
