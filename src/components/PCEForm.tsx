@@ -288,39 +288,43 @@ export const PCEForm: React.FC<PCEFormProps> = ({ value, onChange }) => {
           />
         </div>
 
-        {divider}
+        {/* Equipamento de cravação - Apenas para PCE HELICOIDAL */}
+        {value.ensaioTipo === 'PCE HELICOIDAL' && (
+          <>
+            {divider}
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">Equipamento de cravação</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-3">
+                {(['Fusion (JCB)', 'T10', 'Equipamento do cliente'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setField((d) => { d.cravacao.equipamento = opt; })}
+                    className={`${value.cravacao.equipamento === opt ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700'} px-3 py-2 rounded-lg font-medium hover:scale-105 transition-all text-left`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Horímetro</label>
+                <input
+                  type="text"
+                  value={value.cravacao.horimetro}
+                  onChange={(e) => setField((d) => { d.cravacao.horimetro = e.target.value; })}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Ex.: 3.2h"
+                />
+              </div>
+            </div>
+          </>
+        )}
 
-        {/* Equipamento de cravação */}
-        <div>
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">Equipamento de cravação</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-3">
-            {(['Fusion (JCB)', 'T10', 'Equipamento do cliente'] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setField((d) => { d.cravacao.equipamento = opt; })}
-                className={`${value.cravacao.equipamento === opt ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700'} px-3 py-2 rounded-lg font-medium hover:scale-105 transition-all text-left`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Horímetro</label>
-            <input
-              type="text"
-              value={value.cravacao.horimetro}
-              onChange={(e) => setField((d) => { d.cravacao.horimetro = e.target.value; })}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Ex.: 3.2h"
-            />
-          </div>
-        </div>
-
-        {divider}
-
-        {/* Abastecimento */}
-        <div>
+        {/* Abastecimento - Apenas para PCE HELICOIDAL */}
+        {value.ensaioTipo === 'PCE HELICOIDAL' && (
+          <>
+            {divider}
+            <div>
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">Abastecimento</h3>
           <div className="my-3 border-t border-gray-200 dark:border-gray-800" />
           <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mb-2">Preencher na data de mobilização (Antes do serviço)</p>
@@ -425,6 +429,8 @@ export const PCEForm: React.FC<PCEFormProps> = ({ value, onChange }) => {
             </div>
           </div>
         </div>
+          </>
+        )}
 
         {divider}
 
