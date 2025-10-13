@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { Search, Plus, Building2, Mail, Phone, MapPin, Edit, Trash2 } from 'lucide-react';
 import { Client } from '../types';
+import { useToast } from '../contexts/ToastContext';
+import ConfirmDialog from './ConfirmDialog';
+import EmptyState from './EmptyState';
+import FormInput from './FormInput';
+import FormTextarea from './FormTextarea';
+import { useFormValidation } from '../hooks/useFormValidation';
 
 // Mock data
 const mockClients: Client[] = [
@@ -23,16 +29,29 @@ const mockClients: Client[] = [
 ];
 
 export const ClientsManagement: React.FC = () => {
+  const toast = useToast();
   const [clients, setClients] = useState<Client[]>(mockClients);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    clientId: string | null;
+    clientName: string | null;
+  }>({ isOpen: false, clientId: null, clientName: null });
   
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     address: ''
+  });
+
+  const { errors, touched, validateForm, touchField, handleFieldValidation, resetValidation } = useFormValidation({
+    name: { required: true, minLength: 3, maxLength: 100 },
+    email: { required: true, email: true },
+    phone: { required: true, minLength: 10 },
+    address: { required: true, minLength: 10 }
   });
 
   const filteredClients = clients.filter(client =>
@@ -70,10 +89,17 @@ export const ClientsManagement: React.FC = () => {
       phone: '',
       address: ''
     });
+    resetValidation();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar formulário
+    if (!validateForm(formData)) {
+      toast.error('Por favor, corrija os erros no formulário');
+      return;
+    }
     
     if (editingClient) {
       // Update existing client
@@ -82,6 +108,7 @@ export const ClientsManagement: React.FC = () => {
           ? { ...client, ...formData }
           : client
       ));
+      toast.success('Cliente atualizado com sucesso!');
     } else {
       // Add new client
       const newClient: Client = {
@@ -90,15 +117,23 @@ export const ClientsManagement: React.FC = () => {
         createdAt: new Date().toISOString()
       };
       setClients(prev => [...prev, newClient]);
+      toast.success('Cliente cadastrado com sucesso!');
     }
     
     handleCloseModal();
   };
 
-  const handleDelete = (clientId: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
-      setClients(prev => prev.filter(client => client.id !== clientId));
-    }
+  const handleDeleteClick = (clientId: string, clientName: string) => {
+    setConfirmDialog({ isOpen: true, clientId, clientName });
+  };
+
+  const handleDelete = () => {
+    const { clientId } = confirmDialog;
+    if (!clientId) return;
+    
+    setClients(prev => prev.filter(client => client.id !== clientId));
+    toast.success('Cliente excluído com sucesso!');
+    setConfirmDialog({ isOpen: false, clientId: null, clientName: null });
   };
 
   return (
@@ -157,7 +192,7 @@ export const ClientsManagement: React.FC = () => {
                     <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(client.id)}
+                    onClick={() => handleDeleteClick(client.id, client.name)}
                     className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 hover:scale-110"
                     title="Excluir"
                   >
@@ -186,13 +221,19 @@ export const ClientsManagement: React.FC = () => {
       </div>
 
       {filteredClients.length === 0 && (
-        <div className="text-center py-8 sm:py-12">
-          <Building2 className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-300 dark:text-gray-600 mb-3 sm:mb-4" />
-          <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-1 sm:mb-2">Nenhum cliente encontrado</h3>
-          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
-            {searchTerm ? 'Tente ajustar os termos de busca' : 'Comece adicionando um novo cliente'}
-          </p>
-        </div>
+        <EmptyState
+          icon={searchTerm ? Search : Building2}
+          title={searchTerm ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
+          description={
+            searchTerm
+              ? 'Tente ajustar os termos de busca para encontrar clientes.'
+              : 'Comece adicionando o primeiro cliente ao sistema.'
+          }
+          actionLabel={!searchTerm ? 'Adicionar Cliente' : undefined}
+          onAction={!searchTerm ? () => handleOpenModal() : undefined}
+          secondaryActionLabel={searchTerm ? 'Limpar Busca' : undefined}
+          onSecondaryAction={searchTerm ? () => setSearchTerm('') : undefined}
+        />
       )}
 
       {/* Modal */}
@@ -206,57 +247,63 @@ export const ClientsManagement: React.FC = () => {
             </div>
             
             <form onSubmit={handleSubmit} className="p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Nome da Empresa *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
-                />
-              </div>
+              <FormInput
+                label="Nome da Empresa"
+                type="text"
+                value={formData.name}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, name: e.target.value }));
+                  handleFieldValidation('name', e.target.value);
+                }}
+                onBlur={() => touchField('name')}
+                error={errors.name}
+                touched={touched.name}
+                required
+                maxLength={100}
+              />
               
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
-                />
-              </div>
+              <FormInput
+                label="Email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, email: e.target.value }));
+                  handleFieldValidation('email', e.target.value);
+                }}
+                onBlur={() => touchField('email')}
+                error={errors.email}
+                touched={touched.email}
+                required
+              />
               
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Telefone *
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  required
-                />
-              </div>
+              <FormInput
+                label="Telefone"
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, phone: e.target.value }));
+                  handleFieldValidation('phone', e.target.value);
+                }}
+                onBlur={() => touchField('phone')}
+                error={errors.phone}
+                touched={touched.phone}
+                required
+                placeholder="(00) 00000-0000"
+              />
               
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                  Endereço *
-                </label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm sm:text-base border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  required
-                />
-              </div>
+              <FormTextarea
+                label="Endereço"
+                value={formData.address}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, address: e.target.value }));
+                  handleFieldValidation('address', e.target.value);
+                }}
+                onBlur={() => touchField('address')}
+                error={errors.address}
+                touched={touched.address}
+                required
+                rows={3}
+              />
               
               <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 pt-3 sm:pt-4">
                 <button
@@ -277,6 +324,18 @@ export const ClientsManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, clientId: null, clientName: null })}
+        onConfirm={handleDelete}
+        title="Excluir Cliente"
+        message={`Tem certeza que deseja excluir o cliente "${confirmDialog.clientName}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+      />
     </div>
   );
 };

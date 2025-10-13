@@ -2,10 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Search, Calendar, Clock, User, MapPin, FileText, Eye, Edit, Trash2, Download, FileSpreadsheet } from 'lucide-react';
 import { WorkDiary } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { exportElementToPDF } from '../utils/pdf';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { downloadCsv, mapDiaryToCsvRow } from '../utils/csv';
 import { downloadExcel, mapDiaryToExcelRow } from '../utils/excel';
+import { DiaryListSkeleton, Spinner } from './SkeletonLoader';
+import ConfirmDialog from './ConfirmDialog';
+import EmptyState from './EmptyState';
+import Pagination from './Pagination';
 
 // Tipagem local para exibição
 type DiaryRow = WorkDiary;
@@ -16,6 +21,7 @@ interface DiariesListProps {
 
 export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   const { user } = useAuth();
+  const toast = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -32,6 +38,12 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   const [pitPiles, setPitPiles] = useState<any[]>([]);
   const [placaDetail, setPlacaDetail] = useState<any | null>(null);
   const [placaPiles, setPlacaPiles] = useState<any[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    diary: DiaryRow | null;
+  }>({ isOpen: false, diary: null });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const filteredDiaries = rows.filter((diary) => {
     const term = searchTerm.trim().toLowerCase();
@@ -59,10 +71,32 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   // Lista única de clientes para o filtro
   const uniqueClients = Array.from(new Set(rows.map(d => d.clientName))).sort();
 
+  // Paginação
+  const totalPages = Math.ceil(filteredDiaries.length / itemsPerPage);
+  const paginatedDiaries = filteredDiaries.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset para página 1 quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, startDate, endDate, clientFilter, typeFilter]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
   // Função para exportar para Excel com dados completos
   const handleExportExcel = async () => {
     if (filteredDiaries.length === 0) {
-      alert('Não há diários para exportar com os filtros aplicados');
+      toast.warning('Não há diários para exportar com os filtros aplicados');
       return;
     }
 
@@ -423,13 +457,17 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
     downloadCsv(fileName, [mapDiaryToCsvRow(selectedDiary)]);
   };
 
-  const handleDeleteDiary = async (diary: DiaryRow) => {
-    if (!isSupabaseConfigured) {
-      alert('Supabase não está configurado.');
-      return;
-    }
+  const handleDeleteClick = (diary: DiaryRow) => {
+    setConfirmDialog({ isOpen: true, diary });
+  };
 
-    if (!confirm(`Tem certeza que deseja excluir o diário de "${diary.clientName}" do dia ${formatDate(diary.date)}?`)) {
+  const handleDeleteDiary = async () => {
+    const diary = confirmDialog.diary;
+    if (!diary) return;
+
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase não está configurado.');
+      setConfirmDialog({ isOpen: false, diary: null });
       return;
     }
 
@@ -498,17 +536,18 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
       // Atualizar a lista removendo o diário excluído
       setRows((prevRows) => prevRows.filter((r) => r.id !== diary.id));
       
-      alert('Diário excluído com sucesso!');
+      toast.success('Diário excluído com sucesso!');
     } catch (err: any) {
       console.error('Erro ao excluir diário:', err);
-      alert('Erro ao excluir o diário. Por favor, tente novamente.');
+      toast.error('Erro ao excluir o diário. Por favor, tente novamente.');
     } finally {
       setLoading(false);
+      setConfirmDialog({ isOpen: false, diary: null });
     }
   };
 
   const handleEditDiary = (diary: DiaryRow) => {
-    alert('Funcionalidade de edição em desenvolvimento. Em breve você poderá editar os diários existentes.');
+    toast.info('Funcionalidade de edição em desenvolvimento. Em breve você poderá editar os diários existentes.');
     // TODO: Implementar navegação para página de edição
     // ou abrir modal de edição
   };
@@ -625,7 +664,12 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Características das Estacas</div>
-                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {loadingDetail && (
+                    <div className="p-4 flex items-center justify-center">
+                      <Spinner size="sm" />
+                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
+                    </div>
+                  )}
                   {!loadingDetail && pcePiles.length === 0 && (
                     <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
                   )}
@@ -713,7 +757,12 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Serviços executados (Estacas)</div>
-                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {loadingDetail && (
+                    <div className="p-4 flex items-center justify-center">
+                      <Spinner size="sm" />
+                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
+                    </div>
+                  )}
                   {!loadingDetail && pitPiles.length === 0 && (
                     <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
                   )}
@@ -752,7 +801,12 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
               <div className="space-y-6">
                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Pontos de Ensaio</div>
-                  {loadingDetail && <p className="text-sm text-gray-500">Carregando...</p>}
+                  {loadingDetail && (
+                    <div className="p-4 flex items-center justify-center">
+                      <Spinner size="sm" />
+                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
+                    </div>
+                  )}
                   {placaPiles && placaPiles.length > 0 ? (
                     <div className="p-3">
                       <div className="space-y-3">
@@ -972,13 +1026,13 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
         </div>
       )}
 
-      {loading && (
-        <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">Carregando diários...</div>
-      )}
-
-      {/* Diaries List */}
-      <div className="space-y-3 sm:space-y-4">
-        {filteredDiaries.map((diary) => (
+      {loading ? (
+        <DiaryListSkeleton count={6} />
+      ) : (
+        <>
+          {/* Diaries List */}
+          <div className="space-y-3 sm:space-y-4">
+            {paginatedDiaries.map((diary) => (
           <div key={diary.id} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-lg hover:border-gray-200 dark:hover:border-gray-700 hover:scale-[1.02] transition-all duration-200 cursor-pointer">
             <div className="p-3 sm:p-4 md:p-6">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
@@ -1042,7 +1096,7 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteDiary(diary);
+                          handleDeleteClick(diary);
                         }}
                         className="p-1.5 sm:p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200 hover:scale-110"
                         title="Excluir"
@@ -1058,15 +1112,50 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
         ))}
         
         {filteredDiaries.length === 0 && (
-          <div className="text-center py-12">
-            <FileText className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum diário encontrado</h3>
-            <p className="text-gray-500 dark:text-gray-400">
-              {searchTerm ? 'Tente ajustar os termos de busca' : 'Comece criando um novo diário de obra'}
-            </p>
-          </div>
+          <EmptyState
+            icon={searchTerm || startDate || endDate || clientFilter || typeFilter ? Search : FileText}
+            title={searchTerm || startDate || endDate || clientFilter || typeFilter ? 'Nenhum diário encontrado' : 'Nenhum diário cadastrado'}
+            description={
+              searchTerm || startDate || endDate || clientFilter || typeFilter
+                ? 'Tente ajustar os filtros ou termos de busca para encontrar diários.'
+                : 'Comece criando seu primeiro diário de obra. É rápido e fácil!'
+            }
+            actionLabel={!(searchTerm || startDate || endDate || clientFilter || typeFilter) ? 'Criar Primeiro Diário' : undefined}
+            onAction={!(searchTerm || startDate || endDate || clientFilter || typeFilter) ? onNewDiary : undefined}
+            secondaryActionLabel={searchTerm || startDate || endDate || clientFilter || typeFilter ? 'Limpar Filtros' : undefined}
+            onSecondaryAction={searchTerm || startDate || endDate || clientFilter || typeFilter ? () => { setSearchTerm(''); setStartDate(''); setEndDate(''); setClientFilter(''); setTypeFilter(''); } : undefined}
+          />
         )}
-      </div>
+          </div>
+
+          {/* Paginação */}
+          {filteredDiaries.length > 0 && (
+            <div className="mt-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredDiaries.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, diary: null })}
+        onConfirm={handleDeleteDiary}
+        title="Excluir Diário"
+        message={`Tem certeza que deseja excluir o diário de "${confirmDialog.diary?.clientName}" do dia ${confirmDialog.diary ? formatDate(confirmDialog.diary.date) : ''}? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+        isLoading={loading}
+      />
     </div>
   );
 };

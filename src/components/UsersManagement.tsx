@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, User, Mail, Shield, ShieldCheck, Edit, Trash2, Loader2 } from 'lucide-react';
+import { Search, Plus, User, Mail, Shield, ShieldCheck, Edit, Trash2 } from 'lucide-react';
 import { User as UserType } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { TableSkeleton, UserCardSkeleton } from './SkeletonLoader';
+import ConfirmDialog from './ConfirmDialog';
+import EmptyState from './EmptyState';
 
 // Mock data
 const mockUsers: UserType[] = [
@@ -31,6 +35,7 @@ const mockUsers: UserType[] = [
 
 export const UsersManagement: React.FC = () => {
   const { user: currentUser } = useAuth();
+  const toast = useToast();
   const [users, setUsers] = useState<UserType[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -38,6 +43,11 @@ export const UsersManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    userId: string | null;
+    userName: string | null;
+  }>({ isOpen: false, userId: null, userName: null });
   
   const [formData, setFormData] = useState({
     name: '',
@@ -174,6 +184,7 @@ export const UsersManagement: React.FC = () => {
             ? { ...user, name: formData.name, role: formData.role }
             : user
         ));
+        toast.success('Usuário atualizado com sucesso!');
       } else {
         // Criar novo usuário via Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -223,6 +234,7 @@ export const UsersManagement: React.FC = () => {
             createdAt: new Date().toISOString()
           };
           setUsers(prev => [newUser, ...prev]);
+          toast.success('Usuário criado com sucesso!');
         }
       }
       
@@ -230,16 +242,24 @@ export const UsersManagement: React.FC = () => {
     } catch (err: any) {
       console.error('Erro ao salvar usuário:', err);
       setError(err.message || 'Erro ao salvar usuário');
+      toast.error(err.message || 'Erro ao salvar usuário');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (userId: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este usuário?')) return;
+  const handleDeleteClick = (userId: string, userName: string) => {
+    setConfirmDialog({ isOpen: true, userId, userName });
+  };
+
+  const handleDelete = async () => {
+    const { userId } = confirmDialog;
+    if (!userId) return;
 
     if (!isSupabaseConfigured) {
       setUsers(prev => prev.filter(user => user.id !== userId));
+      toast.success('Usuário excluído com sucesso!');
+      setConfirmDialog({ isOpen: false, userId: null, userName: null });
       return;
     }
 
@@ -253,9 +273,13 @@ export const UsersManagement: React.FC = () => {
       if (error) throw error;
 
       setUsers(prev => prev.filter(user => user.id !== userId));
+      toast.success('Usuário excluído com sucesso!');
     } catch (err: any) {
       console.error('Erro ao deletar usuário:', err);
       setError(err.message || 'Erro ao deletar usuário');
+      toast.error(err.message || 'Erro ao deletar usuário');
+    } finally {
+      setConfirmDialog({ isOpen: false, userId: null, userName: null });
     }
   };
 
@@ -300,10 +324,18 @@ export const UsersManagement: React.FC = () => {
       {/* Users List - Desktop: Table, Mobile: Cards */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-            <span className="ml-3 text-gray-500">Carregando usuários...</span>
-          </div>
+          <>
+            {/* Desktop Skeleton */}
+            <div className="hidden md:block">
+              <TableSkeleton rows={5} />
+            </div>
+            {/* Mobile Skeleton */}
+            <div className="md:hidden space-y-4 p-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <UserCardSkeleton key={i} />
+              ))}
+            </div>
+          </>
         ) : (
           <>
             {/* Desktop Table - Hidden on mobile */}
@@ -361,7 +393,7 @@ export const UsersManagement: React.FC = () => {
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(user.id)}
+                          onClick={() => handleDeleteClick(user.id, user.name)}
                           className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           title="Excluir"
                           disabled={user.id === currentUser?.id}
@@ -422,7 +454,7 @@ export const UsersManagement: React.FC = () => {
                         <Edit className="w-5 h-5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(user.id)}
+                        onClick={() => handleDeleteClick(user.id, user.name)}
                         className="p-2.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Excluir"
                         disabled={user.id === currentUser?.id}
@@ -438,13 +470,19 @@ export const UsersManagement: React.FC = () => {
         )}
         
         {!loading && filteredUsers.length === 0 && (
-          <div className="text-center py-12">
-            <User className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
-            <p className="text-gray-500">
-              {searchTerm ? 'Tente ajustar os termos de busca' : 'Comece adicionando um novo usuário'}
-            </p>
-          </div>
+          <EmptyState
+            icon={searchTerm ? Search : User}
+            title={searchTerm ? 'Nenhum usuário encontrado' : 'Nenhum usuário cadastrado'}
+            description={
+              searchTerm
+                ? 'Tente ajustar os termos de busca para encontrar usuários.'
+                : 'Comece adicionando o primeiro usuário ao sistema.'
+            }
+            actionLabel={!searchTerm ? 'Adicionar Usuário' : undefined}
+            onAction={!searchTerm ? () => handleOpenModal() : undefined}
+            secondaryActionLabel={searchTerm ? 'Limpar Busca' : undefined}
+            onSecondaryAction={searchTerm ? () => setSearchTerm('') : undefined}
+          />
         )}
       </div>
 
@@ -539,6 +577,18 @@ export const UsersManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ isOpen: false, userId: null, userName: null })}
+        onConfirm={handleDelete}
+        title="Excluir Usuário"
+        message={`Tem certeza que deseja excluir o usuário "${confirmDialog.userName}"? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
+      />
     </div>
   );
 };

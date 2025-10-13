@@ -10,27 +10,329 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-gray-50 text-gray-900 font-sans;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
   ::selection {
     background: #d1fae5;
     color: #065f46;
   }
+  
+  /* Smooth scroll com inércia */
+  * {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Safe area para dispositivos com notch */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-area-right {
+    padding-right: env(safe-area-inset-right);
+  }
+  
+  /* Feedback tátil visual */
+  .touch-feedback {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .touch-feedback::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.1);
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s;
+  }
+  
+  .touch-feedback:active::after {
+    width: 200%;
+    height: 200%;
+  }
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  
+  /* Mobile-specific styles */
+  @media (max-width: 768px) {
+    body {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+    
+    #root {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
 }
 
 /* Scrollbar (Webkit) */
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.15);
+  background-color: rgba(5, 150, 105, 0.2);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
+  transition: background-color 0.2s;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(5, 150, 105, 0.4);
 }
 *::-webkit-scrollbar-track {
   background-color: transparent;
+}
+
+/* Scrollbar mobile - mais fino */
+@media (max-width: 768px) {
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+/* Animações */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animações baseadas em scroll */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Animação glitch sutil */
+@keyframes glitchSubtle {
+  0%, 90%, 100% {
+    transform: translate(0);
+    opacity: 1;
+  }
+  92% {
+    transform: translate(-1px, 1px);
+    opacity: 0.95;
+  }
+  94% {
+    transform: translate(1px, -1px);
+    opacity: 0.98;
+  }
+  96% {
+    transform: translate(-1px, -1px);
+    opacity: 0.97;
+  }
+}
+
+@layer utilities {
+  .animate-slideIn {
+    animation: slideIn 0.3s ease-out;
+  }
+  
+  .animate-fadeIn {
+    animation: fadeIn 0.2s ease-out;
+  }
+  
+  .animate-scaleIn {
+    animation: scaleIn 0.2s ease-out;
+  }
+  
+  /* Animações de scroll */
+  .scroll-animate-up {
+    animation: slideInFromBottom 0.5s ease-out;
+  }
+  
+  .scroll-animate-left {
+    animation: slideInFromLeft 0.5s ease-out;
+  }
+  
+  .scroll-animate-right {
+    animation: slideInFromRight 0.5s ease-out;
+  }
+  
+  /* Glitch sutil no hover */
+  .glitch-hover:hover {
+    animation: glitchSubtle 0.6s ease-in-out;
+  }
+  
+  /* Smooth transitions globais */
+  .smooth-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .smooth-transition-slow {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Classes utilitárias para botões */
+@layer components {
+  .btn-primary {
+    @apply bg-green-600 text-white px-4 py-2.5 rounded-lg font-medium 
+           hover:bg-green-700 hover:scale-[1.02] transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
+           active:scale-[0.98];
+  }
+  
+  .btn-secondary {
+    @apply border border-gray-300 dark:border-gray-700 
+           text-gray-700 dark:text-gray-200 
+           px-4 py-2.5 rounded-lg font-medium 
+           hover:bg-gray-50 dark:hover:bg-gray-800 hover:scale-[1.01] 
+           transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
+           active:scale-[0.98];
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white px-4 py-2.5 rounded-lg font-medium 
+           hover:bg-red-700 hover:scale-[1.02] transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
+           active:scale-[0.98];
+  }
+  
+  /* Efeito de foco suave para inputs */
+  .input-focus-soft {
+    @apply focus:ring-2 focus:ring-green-500/20 focus:border-green-500 
+           focus:shadow-focus-soft transition-all duration-200;
+  }
+  
+  /* Card com hover suave */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+  
+  /* Efeito de inclinação suave */
+  .tilt-hover {
+    @apply transition-transform duration-200 hover:rotate-1;
+  }
+  
+  /* Botão mobile com feedback */
+  .mobile-btn {
+    @apply transition-all duration-150 active:scale-95 active:brightness-95;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  
+  /* Card mobile */
+  .mobile-card {
+    @apply bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800
+           transition-all duration-200 active:scale-[0.98];
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Floating Action Button */
+  .fab {
+    @apply fixed bottom-20 right-4 w-14 h-14 bg-gradient-to-br from-green-500 to-green-600
+           rounded-full shadow-xl flex items-center justify-center text-white
+           hover:shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Ripple effect */
+  @keyframes ripple {
+    0% {
+      transform: scale(0);
+      opacity: 0.5;
+    }
+    100% {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+  
+  /* Skeleton loading */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 dark:bg-gray-700 rounded;
+  }
+  
+  /* Divider mobile */
+  .mobile-divider {
+    @apply h-2 bg-gray-50 dark:bg-gray-950 -mx-4 my-4;
+  }
 }

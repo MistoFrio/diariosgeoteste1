@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LogOut, FileText, Users, Building2, Home, Sun, Moon, User, Menu, X, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { BottomNav } from './BottomNav';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -59,7 +60,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 md:pb-0 pb-16">
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div 
@@ -82,12 +83,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               <p className="text-xs text-gray-500 dark:text-gray-400">{user?.name}</p>
             </div>
           </div>
-          <button
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+            <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 hover:scale-110 active:scale-95"
+              >
+                <X className="w-5 h-5" />
+              </button>
         </div>
 
         <nav className="p-4 space-y-1">
@@ -98,10 +99,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               <button
                 key={item.key}
                 onClick={() => handleMenuClick(item.key)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${
                   isActive
                     ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 font-medium'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 hover:scale-[1.01]'
                 }`}
               >
                 <Icon className={`w-5 h-5 ${isActive ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`} />
@@ -114,7 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={logout}
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
           >
             <LogOut className="w-5 h-5" />
             <span>Sair</span>
@@ -123,14 +124,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
       </aside>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/60 backdrop-blur supports-[backdrop-filter]:backdrop-blur-md border-b border-gray-200/70 dark:border-gray-800">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl supports-[backdrop-filter]:backdrop-blur-xl border-b border-gray-200/70 dark:border-gray-800 safe-area-top">
         <div className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Botão de Voltar Mobile */}
             {canGoBack && (
               <button
                 onClick={handleBack}
-                className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 hover:scale-110 active:scale-95"
                 aria-label="Voltar"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -141,14 +142,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
             {!canGoBack && (
               <button
                 onClick={() => setIsMobileMenuOpen(true)}
-                className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 hover:scale-110 active:scale-95"
                 aria-label="Menu"
               >
                 <Menu className="w-5 h-5" />
               </button>
             )}
 
-            <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg overflow-hidden shadow-sm bg-transparent dark:bg-transparent">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 rounded-lg overflow-hidden shadow-sm bg-transparent dark:bg-transparent transition-all duration-300 hover:shadow-md hover:scale-105">
               <img src="/logogeoteste.png" alt="Geoteste" className="w-full h-full object-contain p-1" />
             </div>
             <div className="leading-tight">
@@ -162,17 +163,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
 
             <button
               onClick={toggleTheme}
-              className="p-1.5 sm:p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:scale-105 transition-all duration-200"
+              className="p-1.5 sm:p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:scale-105 active:scale-95 transition-all duration-200"
               aria-label="Alternar tema"
               title={isDark ? 'Tema escuro' : 'Tema claro'}
             >
-              {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
+              {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 hover:rotate-90" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 hover:rotate-12" />}
             </button>
 
             {/* Logout - Mobile */}
             <button
               onClick={logout}
-              className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 md:hidden"
+              className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 md:hidden"
               title="Sair"
               aria-label="Sair"
             >
@@ -185,7 +186,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               </div>
               <button
                 onClick={logout}
-                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200"
+                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95"
                 title="Sair"
                 aria-label="Sair"
               >
@@ -226,12 +227,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 p-3 sm:p-4 md:p-6">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 pb-20 md:pb-6">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Bottom Navigation - Mobile only */}
+      <BottomNav 
+        currentPage={currentPage} 
+        onPageChange={onPageChange}
+        userRole={user?.role}
+      />
     </div>
   );
 };

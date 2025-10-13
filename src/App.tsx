@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { LoginPage } from './components/LoginPage';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -9,17 +10,42 @@ import { ClientsManagement } from './components/ClientsManagement';
 import { UsersManagement } from './components/UsersManagement';
 import { ProfilePage } from './components/ProfilePage';
 import { AgentAssistant } from './components/AgentAssistant';
+import { SplashScreen } from './components/SplashScreen';
+import { InstallPWA } from './components/InstallPWA';
+import { useIsPWA } from './hooks/useIsPWA';
 
 const AppContent: React.FC = () => {
   const { user, isLoading } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [showSplash, setShowSplash] = useState(true);
+  const isPWA = useIsPWA();
+
+  // Mostrar splash screen apenas na primeira vez e se for PWA ou mobile
+  useEffect(() => {
+    const hasShownSplash = sessionStorage.getItem('hasShownSplash');
+    const isMobile = window.innerWidth < 768;
+    
+    if (hasShownSplash || (!isPWA && !isMobile)) {
+      setShowSplash(false);
+    } else {
+      sessionStorage.setItem('hasShownSplash', 'true');
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isPWA]);
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+          <p className="text-gray-600 dark:text-gray-300">Carregando...</p>
         </div>
       </div>
     );
@@ -52,6 +78,7 @@ const AppContent: React.FC = () => {
     <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
       {renderPage()}
       <AgentAssistant />
+      <InstallPWA />
     </Layout>
   );
 };
@@ -59,7 +86,9 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 }
