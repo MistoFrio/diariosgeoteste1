@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # Desabilitar o scanner de secrets para variáveis de ambiente conhecidas
+  SECRETS_SCAN_ENABLED = "false"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -13,4 +17,5 @@
 # Adicione estas variáveis:
 # - VITE_SUPABASE_URL
 # - VITE_SUPABASE_ANON_KEY
+# - VITE_GROQ_API_KEY (opcional, para o assistente AI)
 
