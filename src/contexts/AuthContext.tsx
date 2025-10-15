@@ -29,7 +29,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      console.log('🔄 Inicializando AuthContext (modo local)');
+      // Em produção, não permitir fallback local: exigir Supabase configurado
+      if (import.meta.env.PROD) {
+        console.error('❌ Supabase não configurado em PRODUÇÃO. Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('🔄 Inicializando AuthContext (modo local - desenvolvimento)');
       // Carregar lista de usuários do storage (com defaults se vazio)
       const storedUsers = localStorage.getItem('users');
       if (storedUsers) {
@@ -106,7 +113,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string): Promise<{ ok: boolean; code?: string; message?: string }> => {
     setIsLoading(true);
     if (!isSupabaseConfigured) {
-      // Recarregar usuários do localStorage para garantir dados atualizados
+      // Em produção, não aceitar fallback local
+      if (import.meta.env.PROD) {
+        setIsLoading(false);
+        return { ok: false, code: 'config_missing', message: 'Autenticação indisponível: configure o Supabase no ambiente de produção.' };
+      }
+
+      // Desenvolvimento: fallback local
       const storedUsers = localStorage.getItem('users');
       let currentUsers = users;
       if (storedUsers) {
@@ -177,11 +190,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ok: false, message: 'Preencha todos os campos' };
     }
     if (!isSupabaseConfigured) {
+      if (import.meta.env.PROD) {
+        return { ok: false, message: 'Registro indisponível em produção: configure o Supabase.' };
+      }
       const exists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
       if (exists) {
         return { ok: false, message: 'Email já cadastrado' };
       }
-      // Criar usuário (papel padrão: user)
+      // Criar usuário (papel padrão: user) - somente desenvolvimento
       const newUser: User = {
         id: Date.now().toString(),
         name: name.trim(),
