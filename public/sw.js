@@ -1,5 +1,5 @@
 // Service Worker para PWA - Geoteste
-const CACHE_NAME = 'geoteste-v1';
+const CACHE_NAME = 'geoteste-v2';
 const urlsToCache = [
   '/',
   '/index.html',
