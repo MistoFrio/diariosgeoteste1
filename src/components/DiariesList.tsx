@@ -11,6 +11,7 @@ import { DiaryListSkeleton, Spinner } from './SkeletonLoader';
 import ConfirmDialog from './ConfirmDialog';
 import EmptyState from './EmptyState';
 import Pagination from './Pagination';
+import { DiaryPDFLayout } from './DiaryPDFLayout';
 
 // Tipagem local para exibição
 type DiaryRow = WorkDiary;
@@ -44,6 +45,11 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
   }>({ isOpen: false, diary: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // Detalhes PDA (ficha técnica) e Diário PDA
+  const [fichapdaDetail, setFichapdaDetail] = useState<any | null>(null);
+  const [pdaDiarioDetail, setPdaDiarioDetail] = useState<any | null>(null);
+  const [pdaDiarioPiles, setPdaDiarioPiles] = useState<any[]>([]);
 
   const filteredDiaries = rows.filter((diary) => {
     const term = searchTerm.trim().toLowerCase();
@@ -423,6 +429,35 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
           setPlacaDetail(null);
           setPlacaPiles([]);
         }
+
+        // Buscar Ficha técnica de PDA (fichapda) por diary_id
+        const { data: ficha, error: fichaErr } = await supabase
+          .from('fichapda')
+          .select('*')
+          .eq('diary_id', selectedDiary.id)
+          .maybeSingle();
+        if (fichaErr) throw fichaErr;
+        setFichapdaDetail(ficha || null);
+
+        // Buscar Diário PDA (cabeçalho) por diary_id e suas estacas
+        const { data: pdaDiario, error: pdErr } = await supabase
+          .from('work_diaries_pda_diario')
+          .select('id, pda_computadores, ocorrencias, abastec_equipamentos, horimetro_horas, mobilizacao_litros_tanque, mobilizacao_litros_galao, finaldia_litros_tanque, finaldia_litros_galao, entrega_chegou_diesel, entrega_fornecido_por, entrega_quantidade_litros, entrega_horario_chegada')
+          .eq('diary_id', selectedDiary.id)
+          .maybeSingle();
+        if (pdErr) throw pdErr;
+        setPdaDiarioDetail(pdaDiario || null);
+        if (pdaDiario?.id) {
+          const { data: pdPiles, error: pdPilesErr } = await supabase
+            .from('work_diaries_pda_diario_piles')
+            .select('id, ordem, nome, tipo, diametro_cm, profundidade_m, carga_trabalho_tf, carga_ensaio_tf')
+            .eq('pda_diario_id', pdaDiario.id)
+            .order('ordem', { ascending: true });
+          if (pdPilesErr) throw pdPilesErr;
+          setPdaDiarioPiles(pdPiles || []);
+        } else {
+          setPdaDiarioPiles([]);
+        }
       } catch (e: any) {
         console.error('Erro ao carregar detalhes do diário:', e);
         setPceDetail(null);
@@ -431,6 +466,9 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
         setPitPiles([]);
         setPlacaDetail(null);
         setPlacaPiles([]);
+        setFichapdaDetail(null);
+        setPdaDiarioDetail(null);
+        setPdaDiarioPiles([]);
       } finally {
         setLoadingDetail(false);
       }
@@ -582,308 +620,18 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
 
         {/* Diary Details */}
         <div ref={detailsRef} className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-          {/* Cabeçalho estilizado */}
-          <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b border-gray-200 dark:border-gray-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <img src="/logogeoteste.png" alt="Geoteste" className="h-8 sm:h-10" />
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white">Diário de Obra {selectedDiary.type ? `• ${selectedDiary.type}` : ''}</h1>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">{selectedDiary.clientName}</p>
-                </div>
-              </div>
-              <div className="text-right text-xs sm:text-sm text-gray-700 dark:text-gray-200">
-                <div className="flex items-center justify-end gap-2"><Calendar className="w-4 h-4" /> {formatDate(selectedDiary.date)}</div>
-                <div className="flex items-center justify-end gap-2"><Clock className="w-4 h-4" /> {formatTime(selectedDiary.startTime)} - {formatTime(selectedDiary.endTime)}</div>
-                <div className="flex items-center justify-end gap-2"><User className="w-4 h-4" /> {selectedDiary.createdBy}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 sm:p-6 space-y-6">
-            {/* Bloco: Dados Gerais (estilo tabela) */}
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">Dados do Ensaio</div>
-              <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
-                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Cliente</div>
-                    <div className="text-gray-900 dark:text-gray-100">{selectedDiary.clientName}</div>
-                  </div>
-                  <div className="p-3">
-                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Equipe</div>
-                    <div className="text-gray-900 dark:text-gray-100">{selectedDiary.team}</div>
-                  </div>
-                </div>
-                <div className="p-3">
-                  <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Localização da obra</div>
-                  <div className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.address}</div>
-                  {selectedDiary.enderecoDetalhado && (
-                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
-                      <div className="text-blue-800 dark:text-blue-200 font-medium mb-1">Endereço Detalhado:</div>
-                      <div className="space-y-1 text-blue-700 dark:text-blue-300">
-                        <div><span className="font-medium">Estado:</span> {selectedDiary.enderecoDetalhado.estadoNome}</div>
-                        <div><span className="font-medium">Cidade:</span> {selectedDiary.enderecoDetalhado.cidadeNome}</div>
-                        <div><span className="font-medium">Rua:</span> {selectedDiary.enderecoDetalhado.rua}</div>
-                        <div><span className="font-medium">Número:</span> {selectedDiary.enderecoDetalhado.numero}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3">
-                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
-                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Data</div>
-                    <div className="text-gray-900 dark:text-gray-100">{formatDate(selectedDiary.date)}</div>
-                  </div>
-                  <div className="p-3 border-r border-gray-200 dark:border-gray-800">
-                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Horário início</div>
-                    <div className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.startTime)}</div>
-                  </div>
-                  <div className="p-3">
-                    <div className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400">Horário término</div>
-                    <div className="text-gray-900 dark:text-gray-100">{formatTime(selectedDiary.endTime)}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">Serviços Executados</div>
-              <div className="p-3 sm:p-4">
-                <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.servicesExecuted}</p>
-              </div>
-            </div>
-
-            {/* Seções específicas PCE */}
-            {pceDetail && (
-              <div className="space-y-6">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Tipo de Ensaio</div>
-                  <div className="p-3 text-gray-900 dark:text-gray-100">{pceDetail.ensaio_tipo}</div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Características das Estacas</div>
-                  {loadingDetail && (
-                    <div className="p-4 flex items-center justify-center">
-                      <Spinner size="sm" />
-                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
-                    </div>
-                  )}
-                  {!loadingDetail && pcePiles.length === 0 && (
-                    <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
-                  )}
-                  <div className="space-y-3">
-                    {pcePiles.map((pile) => (
-                      <div key={pile.id} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{pile.estaca_nome || 'Estaca'}</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                          <div>
-                            <span className="text-gray-500 dark:text-gray-400">Profundidade (m): </span>
-                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_profundidade_m ?? '-'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 dark:text-gray-400">Carga de trabalho (tf): </span>
-                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_carga_trabalho_tf ?? '-'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 dark:text-gray-400">Tipo de estaca: </span>
-                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_tipo ?? '-'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 dark:text-gray-400">Diâmetro (cm): </span>
-                            <span className="text-gray-900 dark:text-gray-100">{pile.estaca_diametro_cm ?? '-'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Tipo de Carregamento</div>
-                  <div className="p-3 text-gray-900 dark:text-gray-100">{Array.isArray(pceDetail.carregamento_tipos) && pceDetail.carregamento_tipos.length > 0 ? pceDetail.carregamento_tipos.join(', ') : '-'}</div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Equipamentos Utilizados</div>
-                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                    <div><span className="text-gray-500 dark:text-gray-400">Macaco: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_macaco ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Célula: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_celula ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Manômetro: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_manometro ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Relógios: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_relogios ?? '-'}</span></div>
-                    <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Conjunto de Vigas: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.equipamentos_conjunto_vigas ?? '-'}</span></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Ocorrências</div>
-                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
-                    <p className="text-gray-900 dark:text-gray-100 break-words">{pceDetail.ocorrencias ?? '-'}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Equipamento de cravação</div>
-                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                    <div><span className="text-gray-500 dark:text-gray-400">Equipamento: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.cravacao_equipamento ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Horímetro: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.cravacao_horimetro ?? '-'}</span></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PCE • Abastecimento</div>
-                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                    <div><span className="text-gray-500 dark:text-gray-400">Mobilização - Tanque (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_mobilizacao_litros_tanque ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Mobilização - Galão (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_mobilizacao_litros_galao ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Final do dia - Tanque (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_finaldia_litros_tanque ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Final do dia - Galão (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_finaldia_litros_galao ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Chegou diesel?: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_chegou_diesel == null ? '-' : (pceDetail.abastecimento_chegou_diesel ? 'Sim' : 'Não')}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Fornecido por: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_fornecido_por ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Quantidade (L): </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_quantidade_litros ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Horário da chegada: </span><span className="text-gray-900 dark:text-gray-100">{pceDetail.abastecimento_horario_chegada ?? '-'}</span></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Seções específicas PIT */}
-            {pitDetail && (
-              <div className="space-y-6">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Equipamento</div>
-                  <div className="p-3 text-gray-900 dark:text-gray-100">{pitDetail.equipamento || '-'}</div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Serviços executados (Estacas)</div>
-                  {loadingDetail && (
-                    <div className="p-4 flex items-center justify-center">
-                      <Spinner size="sm" />
-                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
-                    </div>
-                  )}
-                  {!loadingDetail && pitPiles.length === 0 && (
-                    <p className="text-sm text-gray-500">Sem estacas cadastradas.</p>
-                  )}
-                  <div className="space-y-3">
-                    {pitPiles.map((pile) => (
-                      <div key={pile.id} className="border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white mb-2">{pile.estaca_nome || 'Estaca'}</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                          <div><span className="text-gray-500 dark:text-gray-400">Tipo: </span><span className="text-gray-900 dark:text-gray-100">{pile.estaca_tipo ?? '-'}</span></div>
-                          <div><span className="text-gray-500 dark:text-gray-400">Diâmetro (cm): </span><span className="text-gray-900 dark:text-gray-100">{pile.diametro_cm ?? '-'}</span></div>
-                          <div><span className="text-gray-500 dark:text-gray-400">Profundidade (cm): </span><span className="text-gray-900 dark:text-gray-100">{pile.profundidade_cm ?? '-'}</span></div>
-                          <div><span className="text-gray-500 dark:text-gray-400">Arrasamento (m): </span><span className="text-gray-900 dark:text-gray-100">{pile.arrasamento_m ?? '-'}</span></div>
-                          <div><span className="text-gray-500 dark:text-gray-400">Comprimento útil (m): </span><span className="text-gray-900 dark:text-gray-100">{pile.comprimento_util_m ?? '-'}</span></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Ocorrências</div>
-                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
-                    <p className="text-gray-900 dark:text-gray-100 break-words">{pitDetail.ocorrencias ?? '-'}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PIT • Número total de estacas produzidas</div>
-                  <div className="p-3 text-gray-900 dark:text-gray-100">{pitDetail.total_estacas ?? '-'}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Seções específicas PLACA */}
-            {placaDetail && (
-              <div className="space-y-6">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Pontos de Ensaio</div>
-                  {loadingDetail && (
-                    <div className="p-4 flex items-center justify-center">
-                      <Spinner size="sm" />
-                      <span className="ml-2 text-sm text-gray-500">Carregando...</span>
-                    </div>
-                  )}
-                  {placaPiles && placaPiles.length > 0 ? (
-                    <div className="p-3">
-                      <div className="space-y-3">
-                        {placaPiles.map((point, idx) => (
-                          <div key={point.id || idx} className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-lg">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                              <div><span className="text-gray-500 dark:text-gray-400">Nome: </span><span className="text-gray-900 dark:text-gray-100 font-medium">{point.nome || '-'}</span></div>
-                              <div><span className="text-gray-500 dark:text-gray-400">Carga 1 (kgf/cm²): </span><span className="text-gray-900 dark:text-gray-100">{point.carga_trabalho_1_kgf_cm2 || '-'}</span></div>
-                              <div><span className="text-gray-500 dark:text-gray-400">Carga 2 (kgf/cm²): </span><span className="text-gray-900 dark:text-gray-100">{point.carga_trabalho_2_kgf_cm2 || '-'}</span></div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 text-gray-500 dark:text-gray-400">Nenhum ponto de ensaio cadastrado</div>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Equipamentos Utilizados</div>
-                  <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-sm">
-                    <div><span className="text-gray-500 dark:text-gray-400">Macaco: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_macaco ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Célula de carga: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_celula_carga ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Manômetro: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_manometro ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Placa (dimensões): </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_placa_dimensoes ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Equipamento de reação: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_equipamento_reacao ?? '-'}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">Relógios: </span><span className="text-gray-900 dark:text-gray-100">{placaDetail.equipamentos_relogios ?? '-'}</span></div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/60 text-gray-800 dark:text-gray-100 text-xs font-semibold tracking-wide uppercase">PLACA • Ocorrências</div>
-                  <div className="p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/40">
-                    <p className="text-gray-900 dark:text-gray-100 break-words">{placaDetail.ocorrencias ?? '-'}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Assinatura Geoteste</label>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Responsável: <span className="font-medium text-gray-900 dark:text-white">{selectedDiary.geotestSignature}</span>
-                  </p>
-                  {selectedDiary.geotestSignatureImage && (
-                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Assinatura Digital:</p>
-                      <div className="w-full h-40 bg-white rounded flex items-center justify-center">
-                        <img
-                          src={selectedDiary.geotestSignatureImage}
-                          alt="Assinatura digital"
-                          className="w-full h-full object-contain p-2"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Assinatura Responsável da Obra</label>
-                <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.responsibleSignature}</p>
-              </div>
-            </div>
-
-            {selectedDiary.observations && (
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Observações</label>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4">
-                  <p className="text-gray-900 dark:text-gray-100 break-words">{selectedDiary.observations}</p>
-                </div>
-              </div>
-            )}
-          </div>
+          <DiaryPDFLayout
+            diary={selectedDiary}
+            pceDetail={pceDetail}
+            pcePiles={pcePiles}
+            pitDetail={pitDetail}
+            pitPiles={pitPiles}
+            placaDetail={placaDetail}
+            placaPiles={placaPiles}
+            fichapdaDetail={fichapdaDetail}
+            pdaDiarioDetail={pdaDiarioDetail}
+            pdaDiarioPiles={pdaDiarioPiles}
+          />
         </div>
       </div>
     );
@@ -993,7 +741,8 @@ export const DiariesList: React.FC<DiariesListProps> = ({ onNewDiary }) => {
                 <option value="PCE">PCE</option>
                 <option value="PIT">PIT</option>
                 <option value="PLACA">PLACA</option>
-                <option value="PDA">PDA</option>
+                <option value="PDA">Ficha técnica de PDA</option>
+                <option value="PDA_DIARIO">Diário PDA</option>
               </select>
             </div>
 

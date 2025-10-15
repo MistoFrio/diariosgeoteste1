@@ -27,11 +27,11 @@ export async function exportElementToPDF(
     title = 'Diário de Obra',
     logoUrl = '/logogeoteste.png',
     headerBgColor = '#F0FDF4',
-    marginMm = 12,
+    marginMm = 10,
   } = options;
 
   const canvas = await html2canvas(element, {
-    scale: 2.5,
+    scale: 2.0, // Escala otimizada para qualidade e tamanho
     useCORS: true,
     backgroundColor: '#ffffff',
     logging: false,

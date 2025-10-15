@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { PCEForm, PCEFormData } from './PCEForm';
 import { PITForm, PITFormData } from './PITForm';
 import { PLACAForm, PLACAFormData } from './PLACAForm';
+import { PDAForm, PDAFormData } from './PDAForm';
+import { PDADiaryForm, PDADiaryFormData } from './PDADiaryForm';
 import { ClientSelector } from './ClientSelector';
 import { getEstados, getCidadesByEstado, getEstadoById, getCidadeById } from '../data/estadosCidades';
 
@@ -92,6 +94,42 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
       relogios: ''
     },
     ocorrencias: ''
+  });
+
+  const [pdaData, setPdaData] = useState<PDAFormData>({
+    computadorSelecionados: [],
+    equipamentoSelecionados: [],
+    blocoNome: '',
+    estacaNome: '',
+    estacaTipo: '',
+    diametroCm: '',
+    cargaTrabalhoTf: '',
+    cargaEnsaioTf: '',
+    pesoMarteloKg: '',
+    hq: ['', '', '', '', ''],
+    nega: ['', '', '', '', ''],
+    emx: ['', '', '', '', ''],
+    rmx: ['', '', '', '', ''],
+    dmx: ['', '', '', '', ''],
+    secaoCravada: ['', '', '', '', ''],
+    alturaBlocoM: '',
+    alturaSensoresM: '',
+    lpComprimentoUtilM: '',
+    leComprimentoAteSensoresM: '',
+    ltComprimentoTotalM: ''
+  });
+
+  const [pdaDiaryData, setPdaDiaryData] = useState<PDADiaryFormData>({
+    pdaComputadores: [],
+    piles: [{ nome: '', tipo: '', diametroCm: '', profundidadeM: '', cargaTrabalhoTf: '', cargaEnsaioTf: '' }],
+    ocorrencias: '',
+    abastecimento: {
+      equipamentos: [],
+      horimetroHoras: '',
+      mobilizacao: { litrosTanque: '', litrosGalao: '' },
+      finalDia: { litrosTanque: '', litrosGalao: '' },
+      entrega: { chegouDiesel: '', fornecidoPor: '', quantidadeLitros: '', horarioChegada: '' }
+    }
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -426,7 +464,108 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
         }
       }
 
-      setSuccess('Diário salvo com sucesso.');
+      // 5) Se for PDA, cria registro PDA
+      if (formData.type === 'PDA' && diaryId) {
+        const toNumericArray = (arr: string[]) =>
+          (arr || [])
+            .map((v) => v.replace(',', '.').trim())
+            .map((v) => (v === '' ? null : Number(v)))
+            .filter((v) => v !== null && !Number.isNaN(v)) as number[];
+
+        const pdaPayload: any = {
+          diary_id: diaryId,
+          computador: pdaData.computadorSelecionados,
+          equipamento: pdaData.equipamentoSelecionados,
+          bloco_nome: pdaData.blocoNome || null,
+          estaca_nome: pdaData.estacaNome || null,
+          estaca_tipo: pdaData.estacaTipo || null,
+          diametro_cm: pdaData.diametroCm ? Number(pdaData.diametroCm.replace(',', '.')) : null,
+          carga_trabalho_tf: pdaData.cargaTrabalhoTf ? Number(pdaData.cargaTrabalhoTf.replace(',', '.')) : null,
+          carga_ensaio_tf: pdaData.cargaEnsaioTf ? Number(pdaData.cargaEnsaioTf.replace(',', '.')) : null,
+          peso_martelo_kg: pdaData.pesoMarteloKg ? Number(pdaData.pesoMarteloKg.replace(',', '.')) : null,
+          hq: toNumericArray(pdaData.hq),
+          nega: toNumericArray(pdaData.nega),
+          emx: toNumericArray(pdaData.emx),
+          rmx: toNumericArray(pdaData.rmx),
+          dmx: toNumericArray(pdaData.dmx),
+          secao_cravada: toNumericArray(pdaData.secaoCravada),
+          altura_bloco_m: pdaData.alturaBlocoM ? Number(pdaData.alturaBlocoM.replace(',', '.')) : null,
+          altura_sensores_m: pdaData.alturaSensoresM ? Number(pdaData.alturaSensoresM.replace(',', '.')) : null,
+          lp_m: pdaData.lpComprimentoUtilM ? Number(pdaData.lpComprimentoUtilM.replace(',', '.')) : null,
+          le_m: pdaData.leComprimentoAteSensoresM ? Number(pdaData.leComprimentoAteSensoresM.replace(',', '.')) : null,
+          lt_m: pdaData.ltComprimentoTotalM ? Number(pdaData.ltComprimentoTotalM.replace(',', '.')) : null,
+        };
+
+        const { error: pdaError } = await supabase
+          .from('fichapda')
+          .insert(pdaPayload);
+        if (pdaError) {
+          setError(pdaError.message);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // 6) Se for PDA_DIARIO, cria cabeçalho e estacas do dia
+      if (formData.type === 'PDA_DIARIO' && diaryId) {
+        const toNum = (s: string) => {
+          const t = (s || '').replace(',', '.').trim();
+          const n = Number(t);
+          return Number.isFinite(n) ? n : null;
+        };
+
+        const diarioPayload: any = {
+          diary_id: diaryId,
+          pda_computadores: pdaDiaryData.pdaComputadores,
+          ocorrencias: pdaDiaryData.ocorrencias || null,
+          abastec_equipamentos: pdaDiaryData.abastecimento.equipamentos,
+          horimetro_horas: toNum(pdaDiaryData.abastecimento.horimetroHoras),
+          mobilizacao_litros_tanque: toNum(pdaDiaryData.abastecimento.mobilizacao.litrosTanque),
+          mobilizacao_litros_galao: toNum(pdaDiaryData.abastecimento.mobilizacao.litrosGalao),
+          finaldia_litros_tanque: toNum(pdaDiaryData.abastecimento.finalDia.litrosTanque),
+          finaldia_litros_galao: toNum(pdaDiaryData.abastecimento.finalDia.litrosGalao),
+          entrega_chegou_diesel: pdaDiaryData.abastecimento.entrega.chegouDiesel === '' ? null : pdaDiaryData.abastecimento.entrega.chegouDiesel === 'Sim',
+          entrega_fornecido_por: pdaDiaryData.abastecimento.entrega.fornecidoPor || null,
+          entrega_quantidade_litros: toNum(pdaDiaryData.abastecimento.entrega.quantidadeLitros),
+          entrega_horario_chegada: pdaDiaryData.abastecimento.entrega.horarioChegada || null,
+        };
+
+        const { data: diarioRow, error: diarioError } = await supabase
+          .from('work_diaries_pda_diario')
+          .insert(diarioPayload)
+          .select('id')
+          .single();
+        if (diarioError) {
+          setError(diarioError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const diarioId = (diarioRow as any)?.id;
+        if (diarioId && pdaDiaryData.piles && pdaDiaryData.piles.length > 0) {
+          const rows = pdaDiaryData.piles.map((p, idx) => ({
+            pda_diario_id: diarioId,
+            ordem: idx + 1,
+            nome: p.nome || null,
+            tipo: p.tipo || null,
+            diametro_cm: toNum(p.diametroCm),
+            profundidade_m: toNum(p.profundidadeM),
+            carga_trabalho_tf: toNum(p.cargaTrabalhoTf),
+            carga_ensaio_tf: toNum(p.cargaEnsaioTf),
+          }));
+
+          const { error: pilesError } = await supabase
+            .from('work_diaries_pda_diario_piles')
+            .insert(rows);
+          if (pilesError) {
+            setError(pilesError.message);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      setSuccess('Registro salvo com sucesso.');
       setIsSubmitting(false);
       onBack();
     } catch (err: any) {
@@ -480,7 +619,7 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
             <FileText className="text-white w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">Novo Diário de Obra</h1>
+            <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">{formData.type === 'PDA' ? 'Nova Ficha Técnica de PDA' : 'Novo Diário de Obra'}</h1>
             <p className="text-xs sm:text-sm md:text-base text-gray-600 dark:text-gray-300">Registre os detalhes dos serviços executados</p>
           </div>
         </div>
@@ -511,19 +650,22 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
           <div className="p-4 sm:p-5 md:p-6 space-y-4 sm:space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                Tipo do Diário *
+                Tipo de Registro *
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {['PCE','PLACA','PIT','PDA'].map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => handleChange('type', opt)}
-                    className={`${formData.type === opt ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700'} px-3 py-2 rounded-lg font-medium hover:scale-105 transition-all`}
-                  >
-                    {opt}
-                  </button>
-                ))}
+                {(['PCE','PLACA','PIT','PDA','PDA_DIARIO'] as const).map((opt) => {
+                  const label = opt === 'PDA' ? 'Ficha técnica de PDA' : opt === 'PDA_DIARIO' ? 'Diário PDA' : opt;
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => handleChange('type', opt)}
+                      className={`${formData.type === opt ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700'} px-3 py-2 rounded-lg font-medium hover:scale-105 transition-all`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -757,6 +899,18 @@ export const NewDiary: React.FC<NewDiaryProps> = ({ onBack }) => {
         {formData.type === 'PIT' && (
           <div className="mt-6">
             <PITForm value={pitData} onChange={setPitData} />
+          </div>
+        )}
+
+        {formData.type === 'PDA' && (
+          <div className="mt-6">
+            <PDAForm value={pdaData} onChange={setPdaData} />
+          </div>
+        )}
+
+        {formData.type === 'PDA_DIARIO' && (
+          <div className="mt-6">
+            <PDADiaryForm value={pdaDiaryData} onChange={setPdaDiaryData} />
           </div>
         )}
 
