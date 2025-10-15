@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# As variáveis de ambiente devem ser configuradas no painel do Netlify:
+# Site settings > Environment variables > Add a variable
+# 
+# Adicione estas variáveis:
+# - VITE_SUPABASE_URL
+# - VITE_SUPABASE_ANON_KEY
+
