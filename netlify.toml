@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Netlify will inject your VITE_* variables automatically; ensure production mode
+  NODE_VERSION = "18"
+  NPM_FLAGS = "--silent"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Ensure assets pick up new versions appropriately (SW will also help)
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+
